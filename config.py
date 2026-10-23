@@ -96,7 +96,10 @@ class Config(metaclass=ConfigMeta):
     DEFAULT_CLINIC_ID: str = os.getenv("DEFAULT_CLINIC_ID", "chc_alwar_01")
     CLINIC_DESK_ADDRESSES: List[str] = [
         addr.strip()
-        for addr in os.getenv("CLINIC_DESK_ADDRESSES", "").split(",")
+        for addr in os.getenv(
+            "CLINIC_DESK_ADDRESSES",
+            "alwar_chc_reception_desk,clinic_reception_desk,desk_test,chc_desk_01",
+        ).split(",")
         if addr.strip()
     ]
     CLINIC_DESK_TOKEN: str = os.getenv("CLINIC_DESK_TOKEN", "")

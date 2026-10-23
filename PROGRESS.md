@@ -19,8 +19,8 @@
 | Phase 7 | Emergency detection & 108 SOS tripwires | ✅ DONE | Layered regex + Devanagari/Hinglish safety rules + Tele-MANAS/108 helplines + 65-case red flag corpus (100% recall) |
 | Phase 6 | Clinical safety, zero fabrication | ✅ DONE | Zero fabricated vitals/PMH/Rx, NTEP TB criteria (cough > 2w + B-symptoms), General Medicine default for unclassified, disclaimers, clarifying questions |
 | Phase 5 | ASI1 LLM core reasoning engine | ✅ DONE | OpenAI-compatible ASI:One client with multi-tier fallback (ASI1 -> Gemini -> OpenAI -> Deterministic), error correction retry, honest vision handling, provenance |
-| Phase 8 | Real Payment Protocol & secure escrow | ⏳ NEXT | `payment_protocol_spec`, SQLite source of truth, clinic auth |
-| Phase 9 | Booking logic & capacity | ⏳ PENDING | Atomic capacity decrement, slot dates, json roster, foreign keys |
+| Phase 8 | Real Payment Protocol & secure escrow | ✅ DONE | Official `payment_protocol_spec` with `seller` role, `CommitPayment` handler, SQLite `escrow` table (single source of truth), clinic desk auth, double-refund prevention, honest simulation labelling |
+| Phase 9 | Booking logic & capacity | ⏳ NEXT | Atomic capacity decrement, slot dates, json roster, foreign keys |
 | Phase 10 | ASI1 Interactive Cards | ⏳ PENDING | Interactive Card schemas with robust text fallback |
 | Phase 11 | Orchestration & Tools | ⏳ PENDING | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator |
 | Phase 12 | Tests, CI, Docs & README | ⏳ PENDING | GitHub CI, updated README with badges, Devpost demo script |
@@ -83,6 +83,13 @@
   - `services/llm_client.py`: Created `LLMClient` with unified multi-tier fallback architecture: Primary ASI:One OpenAI-compatible endpoint (`ASI1_API_KEY`, `ASI1_BASE_URL`, `ASI1_MODEL`) -> Secondary Google Gemini (`gemini-2.5-flash`) -> Tertiary OpenAI (`gpt-4o-mini`) -> Deterministic clinical intelligence engine. Added clean JSON fence stripper and 1-attempt error correction retry prompt on schema validation failures. Implemented honest vision handling (`HONEST_VISION_NOTE_HI` / `HONEST_VISION_NOTE_EN`), honestly informing users when visual models are unavailable without hallucinating morphological lesions. Implemented strict provenance recording in `dossier.engine`.
   - `services/vlm_service.py`: Integrated `LLMClient` into `VLMService.analyze_case()`; removed fake morphological hallucination from lesion photo branch.
   - `tests/test_phase5_llm.py`: Added 7 tests covering valid JSON parsing, markdown fence stripping, malformed JSON retry recovery, persistent malformed fallback to deterministic engine, APITimeoutError handling, 401 AuthenticationError handling, honest vision fallback, and provenance tracking.
-- **Tests Passing**: 37/37 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 8 (Real Payment Protocol & Secure Escrow).
-- **Exact Next Step**: Phase 8 — Inspect `uagents_core.contrib.protocols.payment`, implement official `payment_protocol_spec` with `RequestPayment`, `CommitPayment`, `CompletePayment`; single source of truth in SQLite `escrow` table; clinic desk authentication with QR hash token; explicit simulation labelling when `PAYMENT_MODE=simulation`.
+## Phase 8 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6, Phase 5, Phase 8
+- **Files Changed**:
+  - `agents/escrow_worker.py`: Integrated official `uagents_core.contrib.protocols.payment` (`payment_protocol_spec`, `role="seller"`) with handlers for `CommitPayment` and `RejectPayment`. Implemented `create_payment_request()` ACP helper. Eliminated in-memory `_ESCROW_LEDGER` dict; unified all state into SQLite `escrow` table with atomic transitions (`PENDING` -> `LOCKED` -> `REFUNDED` / `CANCELLED`). Added strict clinic reception desk authentication (`CLINIC_DESK_ADDRESSES`) preventing patients from self-refunding (`status="UNAUTHORIZED"`). Added QR token integrity checks (`INVALID_TOKEN`) and atomic double-refund prevention (`ALREADY_RELEASED`). Replaced fake `0x{uuid4}` hashes with honest simulation labels: `[SIMULATED - PAYMENT_MODE=simulation]` and synthetic `sim_tx_...` / `sim_refund_...` hashes.
+  - `services/clinic_roster.py`: Created SQLite `escrow` table schema; implemented atomic `create_escrow_deposit()`, `lock_escrow_deposit()`, `release_escrow_refund()`, `get_escrow()`, and `cancel_escrow()`.
+  - `config.py`: Added default authorized clinic desk addresses in `CLINIC_DESK_ADDRESSES`.
+  - `tests/test_phase8_escrow.py`: Added 8 tests covering official payment protocol inclusion, `RequestPayment` construction, `CommitPayment` verification and deposit locking, insufficient deposit cancellation, unauthorized patient check-in rejection, authorized clinic refund, double-refund prevention, invalid token rejection, and slot cancellation.
+- **Tests Passing**: 45/45 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 9 (Booking Logic & Capacity).
+- **Exact Next Step**: Phase 9 — Implement atomic capacity decrement in SQLite (`UPDATE slots SET capacity = capacity - 1 WHERE slot_id = ? AND capacity > 0`), enforce per-date slots (`slot_date`), stop silent fallback to Pulmonology slot 0 for invalid slot_ids (raise explicit error), map specialty from controlled Enum, load clinic doctors and slots from `data/clinic_roster.json`.

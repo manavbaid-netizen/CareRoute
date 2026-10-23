@@ -18,7 +18,7 @@ class ClinicRosterService:
         self._init_db()
 
     def _init_db(self) -> None:
-        """Create bookings table if not existing."""
+        """Create bookings and escrow tables if not existing."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -38,6 +38,23 @@ class ClinicRosterService:
                     escrow_status TEXT NOT NULL,
                     booking_status TEXT NOT NULL,
                     created_at TEXT NOT NULL
+                )
+                """
+            )
+            # Create unified escrow table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS escrow (
+                    ticket_id TEXT PRIMARY KEY,
+                    patient_address TEXT NOT NULL,
+                    amount_fet REAL NOT NULL,
+                    lock_tx TEXT,
+                    refund_tx TEXT,
+                    status TEXT NOT NULL,
+                    qr_token TEXT,
+                    created_at TEXT NOT NULL,
+                    locked_at TEXT,
+                    refunded_at TEXT
                 )
                 """
             )
@@ -150,8 +167,8 @@ class ClinicRosterService:
                 INSERT INTO appointments (
                     ticket_id, patient_id, patient_name, clinic_name,
                     doctor_name, specialty, room_no, slot_id, slot_time,
-                    dossier_id, escrow_status, booking_status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    dossier_id, escrow_status, booking_status, created_at, qr_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ticket_id,
@@ -167,6 +184,28 @@ class ClinicRosterService:
                     "LOCKED",
                     "CONFIRMED",
                     now_iso,
+                    qr_payload,
+                ),
+            )
+            # Create corresponding escrow record
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO escrow (
+                    ticket_id, patient_address, amount_fet, lock_tx,
+                    refund_tx, status, qr_token, created_at, locked_at, refunded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ticket_id,
+                    patient_id,
+                    Config.ESCROW_DEPOSIT_FET,
+                    f"sim_tx_{Config.ESCROW_DEPOSIT_FET}fet_{uuid.uuid4().hex[:12]}",
+                    None,
+                    "LOCKED",
+                    qr_payload,
+                    now_iso,
+                    now_iso,
+                    None,
                 ),
             )
             conn.commit()
@@ -205,6 +244,118 @@ class ClinicRosterService:
                 return dict(row)
         return None
 
+    def create_escrow_deposit(
+        self,
+        ticket_id: str,
+        patient_address: str,
+        amount_fet: float = 0.5,
+        qr_token: Optional[str] = None,
+        status: str = "PENDING",
+    ) -> Dict[str, Any]:
+        """Create a pending or locked escrow deposit record."""
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        lock_tx = f"sim_tx_{amount_fet}fet_{uuid.uuid4().hex[:12]}" if status == "LOCKED" else None
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO escrow (
+                    ticket_id, patient_address, amount_fet, lock_tx,
+                    refund_tx, status, qr_token, created_at, locked_at, refunded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ticket_id,
+                    patient_address,
+                    amount_fet,
+                    lock_tx,
+                    None,
+                    status,
+                    qr_token,
+                    now_iso,
+                    now_iso if status == "LOCKED" else None,
+                    None,
+                ),
+            )
+            conn.commit()
+        return self.get_escrow(ticket_id)
+
+    def lock_escrow_deposit(self, ticket_id: str, lock_tx: str) -> bool:
+        """Atomic lock transition on escrow record."""
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE escrow
+                SET status = 'LOCKED', lock_tx = ?, locked_at = ?
+                WHERE ticket_id = ? AND status = 'PENDING'
+                """,
+                (lock_tx, now_iso, ticket_id),
+            )
+            updated = cursor.rowcount > 0
+            if updated:
+                cursor.execute(
+                    "UPDATE appointments SET escrow_status = 'LOCKED', booking_status = 'CONFIRMED' WHERE ticket_id = ?",
+                    (ticket_id,),
+                )
+            conn.commit()
+            return updated
+
+    def release_escrow_refund(self, ticket_id: str, refund_tx: str) -> bool:
+        """Atomic refund transition on escrow record."""
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE escrow
+                SET status = 'REFUNDED', refund_tx = ?, refunded_at = ?
+                WHERE ticket_id = ? AND status = 'LOCKED'
+                """,
+                (refund_tx, now_iso, ticket_id),
+            )
+            updated = cursor.rowcount > 0
+            if updated:
+                cursor.execute(
+                    "UPDATE appointments SET escrow_status = 'REFUNDED', booking_status = 'CHECKED_IN' WHERE ticket_id = ?",
+                    (ticket_id,),
+                )
+            conn.commit()
+            return updated
+
+    def get_escrow(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve escrow record by ticket ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM escrow WHERE ticket_id = ?", (ticket_id,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        return None
+
+    def cancel_escrow(self, ticket_id: str, reason: str = "expired") -> bool:
+        """Atomic cancellation of pending escrow deposit."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE escrow
+                SET status = 'CANCELLED'
+                WHERE ticket_id = ? AND status = 'PENDING'
+                """,
+                (ticket_id,),
+            )
+            updated = cursor.rowcount > 0
+            if updated:
+                cursor.execute(
+                    "UPDATE appointments SET escrow_status = 'CANCELLED', booking_status = 'CANCELLED' WHERE ticket_id = ?",
+                    (ticket_id,),
+                )
+            conn.commit()
+            return updated
+
     def mark_checked_in(self, ticket_id: str) -> bool:
         """Mark booking as checked in upon clinic desk QR verification."""
         with sqlite3.connect(self.db_path) as conn:
@@ -218,4 +369,5 @@ class ClinicRosterService:
                 (ticket_id,),
             )
             conn.commit()
+            return cursor.rowcount > 0
             return cursor.rowcount > 0
