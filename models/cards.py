@@ -1,12 +1,82 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 
+from uagents_core.contrib.protocols.chat import (
+    ChatMessage,
+    TextContent,
+    MetadataContent,
+)
+from config import Config
+
+
+# ------------------------------------------------------------------------------
+# Pydantic v2 Models for ASI:One Interactive Cards
+# ------------------------------------------------------------------------------
+
+class CardAction(BaseModel):
+    """Interactive button or CTA element on an ASI:One card."""
+    type: str = "button"
+    action_id: str
+    label: str
+    style: str = "primary"  # "primary", "secondary", "danger", "disabled"
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    url: Optional[str] = None
+
+
+class CardHeader(BaseModel):
+    """Title and badge banner for an interactive card."""
+    title: str
+    badge: Optional[str] = None
+
+
+class CardFact(BaseModel):
+    """Key-value datum for receipt or summary sections."""
+    label: str
+    value: str
+
+
+class CardSection(BaseModel):
+    """Content section within an interactive card."""
+    title: Optional[str] = None
+    highlight: Optional[str] = None
+    subtitle: Optional[str] = None
+    content: Optional[str] = None
+    items: Optional[List[str]] = None
+    facts: Optional[List[Dict[str, str]]] = None
+    qr_payload: Optional[str] = None
+    qr_visual: Optional[str] = None
+
+
+class CardTheme(BaseModel):
+    """Visual branding theme for ASI:One card drawer."""
+    primary_color: str = "#2563EB"
+    badge_bg: Optional[str] = None
+    badge_text: Optional[str] = None
+
+
+class InteractiveCard(BaseModel):
+    """Official ASI:One Interactive Card schema."""
+    card_type: str
+    version: str = "1.0"
+    theme: CardTheme = Field(default_factory=CardTheme)
+    header: CardHeader
+    sections: List[CardSection] = Field(default_factory=list)
+    actions: List[CardAction] = Field(default_factory=list)
+
+
+# ------------------------------------------------------------------------------
+# Plain-Text & Accessible Markdown Fallback Renderer
+# ------------------------------------------------------------------------------
 
 def card_to_markdown(card: Dict[str, Any]) -> str:
     """
     Render an ASI interactive card dictionary into clean, accessible Markdown
-    for text-based ACP clients or fallback display.
+    for text-based ACP clients or fallback display when cards are disabled.
+    Provides clear numeric prompts ("Reply 1, 2 or 3") for mobile navigation.
     """
     header = card.get("header", {})
     title = header.get("title", "")
@@ -24,30 +94,118 @@ def card_to_markdown(card: Dict[str, Any]) -> str:
         sec_title = sec.get("title")
         if sec_title:
             lines.append(f"**{sec_title}**")
-        if "highlight" in sec:
+        if "highlight" in sec and sec["highlight"]:
             lines.append(f"👉 **{sec['highlight']}**")
-        if "subtitle" in sec:
+        if "subtitle" in sec and sec["subtitle"]:
             lines.append(f"_{sec['subtitle']}_")
-        if "content" in sec:
+        if "content" in sec and sec["content"]:
             lines.append(sec["content"])
-        if "items" in sec:
+        if "items" in sec and sec["items"]:
             for item in sec["items"]:
                 lines.append(f"• {item}")
-        if "facts" in sec:
+        if "facts" in sec and sec["facts"]:
             for fact in sec["facts"]:
                 lines.append(f"• **{fact['label']}:** {fact['value']}")
-        if "qr_payload" in sec:
+        if "qr_payload" in sec and sec["qr_payload"]:
             lines.append(f"\n🔐 **चेक-इन टोकन (Check-in Token):** `{sec['qr_payload']}`")
         lines.append("")
 
     if actions:
-        lines.append("**चयन करने के लिए विकल्प संख्या या टेक्स्ट भेजें:**")
+        lines.append("───────────────────────────────────")
+        lines.append("📲 **चयन करने के लिए विकल्प संख्या (1, 2, 3...) भेजें:**")
         for idx, act in enumerate(actions, 1):
             label = act.get("label", "")
-            lines.append(f"[{idx}] {label}")
+            lines.append(f"  **[{idx}]** {label}")
 
     return "\n".join(lines).strip()
 
+
+# ------------------------------------------------------------------------------
+# Action Parsing & Fallback Extraction
+# ------------------------------------------------------------------------------
+
+def parse_card_action(user_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parse an incoming client message to determine if it is an interactive
+    card action payload (JSON from a button tap) or a numeric text selection.
+    """
+    cleaned = user_text.strip()
+    if not cleaned:
+        return None
+
+    # 1. Native JSON action payload from button click
+    if cleaned.startswith("{") and cleaned.endswith("}"):
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict) and "action" in parsed:
+                return parsed
+        except Exception:
+            pass
+
+    # 2. Check for numeric choice (e.g. "1", "2", "#1")
+    num_match = re.match(r"^#?(\d+)$", cleaned)
+    if num_match:
+        return {"action": "numeric_choice", "choice": int(num_match.group(1))}
+
+    return None
+
+
+# ------------------------------------------------------------------------------
+# ACP Message Builder with Native Interactive Card & Text Fallback
+# ------------------------------------------------------------------------------
+
+def create_card_chat(
+    text: str,
+    card: Dict[str, Any],
+    use_interactive: Optional[bool] = None,
+    end_session: bool = False,
+) -> ChatMessage:
+    """
+    Construct an official ACP ChatMessage delivering an interactive card.
+    
+    If use_interactive is True (defaulting to Config.USE_INTERACTIVE_CARDS):
+      - Emits TextContent containing the readable text & Markdown fallback.
+      - Emits MetadataContent containing the structured card payload so
+        ASI:One clients render the native visual drawer.
+    If use_interactive is False:
+      - Emits only TextContent containing readable Markdown.
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from uagents_core.contrib.protocols.chat import EndSessionContent
+
+    if use_interactive is None:
+        use_interactive = getattr(Config, "USE_INTERACTIVE_CARDS", True)
+
+    markdown_view = card_to_markdown(card)
+    full_text = f"{text.strip()}\n\n{markdown_view}".strip() if text else markdown_view
+
+    contents = [TextContent(text=full_text, type="text")]
+
+    if use_interactive:
+        # Wrap card in MetadataContent for ASI:One native renderer
+        card_metadata = {
+            "card_kind": card.get("card_type", "card"),
+            "card_payload": json.dumps(card, ensure_ascii=False),
+            "card_version": str(card.get("version", "1.0")),
+            "title": card.get("header", {}).get("title", ""),
+        }
+        contents.append(MetadataContent(metadata=card_metadata, type="metadata"))
+
+    if end_session:
+        contents.append(EndSessionContent())
+
+    return ChatMessage(
+        msg_id=uuid4(),
+        timestamp=datetime.now(timezone.utc),
+        content=contents,
+    )
+
+
+# ------------------------------------------------------------------------------
+# Card Builders (Optimized with short mobile labels)
+# ------------------------------------------------------------------------------
 
 def make_triage_detail_card(
     urgency: str,
@@ -66,7 +224,7 @@ def make_triage_detail_card(
 
     differentials_list = differentials or ["Clinical assessment pending physical exam"]
 
-    return {
+    card_dict = {
         "card_type": "triage_detail",
         "version": "1.0",
         "theme": {
@@ -75,7 +233,7 @@ def make_triage_detail_card(
             "badge_text": theme_color,
         },
         "header": {
-            "title": "केयररूट प्रारंभिक क्लिनिकल ट्राइएज (CareRoute Triage)",
+            "title": "केयररूट क्लिनिकल ट्राइएज (Triage Result)",
             "badge": f"{badge_label} • {urgency}",
         },
         "sections": [
@@ -88,7 +246,7 @@ def make_triage_detail_card(
                 "items": differentials_list[:3],
             },
             {
-                "title": "ओपीडी परामर्श पूर्व सलाह (Pre-Visit Advice)",
+                "title": "ओपीडी पूर्व सलाह (Pre-Visit Advice)",
                 "content": pre_visit_advice,
             },
         ],
@@ -96,7 +254,7 @@ def make_triage_detail_card(
             {
                 "type": "button",
                 "action_id": "ACTION_VIEW_SLOTS",
-                "label": "📅 उपलब्ध CHC डॉक्टर स्लॉट देखें (View Available Slots)",
+                "label": "📅 स्लॉट देखें (View Slots)",
                 "style": "primary",
                 "payload": {
                     "action": "view_slots",
@@ -106,12 +264,16 @@ def make_triage_detail_card(
             {
                 "type": "button",
                 "action_id": "ACTION_RESTART",
-                "label": "🔄 नया लक्षण जोड़ें (Add More Symptoms)",
+                "label": "🔄 लक्षण जोड़ें (Add Symptoms)",
                 "style": "secondary",
                 "payload": {"action": "add_symptom"},
             },
         ],
     }
+
+    # Validate against Pydantic schema
+    InteractiveCard.model_validate(card_dict)
+    return card_dict
 
 
 def make_slot_picker_card(
@@ -123,16 +285,21 @@ def make_slot_picker_card(
 ) -> Dict[str, Any]:
     """
     Build an ASI Interactive Card displaying CHC doctor appointment slots.
-    Each slot is an interactive selection button.
+    Each slot button is formatted with concise, mobile-friendly touch labels.
     """
     slot_actions = []
     for idx, slot in enumerate(available_slots, 1):
+        cap = slot.get("capacity", 5)
+        rem = slot.get("remaining_capacity", cap)
+        is_avail = rem > 0 if rem is not None else cap > 0
+        status_tag = f"({rem} बचे)" if rem is not None else ""
+
         slot_actions.append(
             {
                 "type": "button",
                 "action_id": f"SELECT_SLOT_{slot['slot_id']}",
-                "label": f"🕒 {slot['time']} (कमरा: {room_no})",
-                "style": "primary" if slot.get("capacity", 1) > 0 else "disabled",
+                "label": f"🕒 {slot['time']} {status_tag}".strip(),
+                "style": "primary" if is_avail else "disabled",
                 "payload": {
                     "action": "select_slot",
                     "slot_id": slot["slot_id"],
@@ -145,7 +312,7 @@ def make_slot_picker_card(
             }
         )
 
-    return {
+    card_dict = {
         "card_type": "slot_picker",
         "version": "1.0",
         "theme": {
@@ -154,8 +321,8 @@ def make_slot_picker_card(
             "badge_text": "#1E40AF",
         },
         "header": {
-            "title": f"🏥 सामुदायिक स्वास्थ्य केंद्र (CHC) {clinic_name}",
-            "badge": "ओपीडी बुकिंग (OPD Booking)",
+            "title": f"🏥 {clinic_name}",
+            "badge": "ओपीडी स्लॉट चयन (Select Slot)",
         },
         "sections": [
             {
@@ -170,6 +337,10 @@ def make_slot_picker_card(
         ],
         "actions": slot_actions,
     }
+
+    # Validate against Pydantic schema
+    InteractiveCard.model_validate(card_dict)
+    return card_dict
 
 
 def make_booking_receipt_card(
@@ -198,7 +369,7 @@ def make_booking_receipt_card(
         "└─────────────────┘"
     )
 
-    return {
+    card_dict = {
         "card_type": "booking_receipt",
         "version": "1.0",
         "theme": {
@@ -207,7 +378,7 @@ def make_booking_receipt_card(
             "badge_text": "#065F46",
         },
         "header": {
-            "title": "✅ ओपीडी परामर्श पर्ची (OPD Confirmed Ticket)",
+            "title": "✅ ओपीडी परामर्श पर्ची (Confirmed Ticket)",
             "badge": f"टोकन #: {ticket_id}",
         },
         "sections": [
@@ -223,10 +394,10 @@ def make_booking_receipt_card(
             },
             {
                 "title": "एस्क्रो अमानत स्थिति (Escrow Deposit Status)",
-                "content": f"🔒 {deposit_fet} FET जमा लॉक किया गया है। ओपीडी रिसेप्शन / रूम {room_no} पर क्यूआर स्कैन करने पर तुरंत रिफंड मिलेगा।",
+                "content": f"🔒 {deposit_fet} FET जमा लॉक किया गया है। ओपीडी रिसेप्शन पर क्यूआर स्कैन करने पर तुरंत रिफंड मिलेगा।",
             },
             {
-                "title": "चेक-इन डिजिटल टोकन (Scan QR Code at Clinic Desk)",
+                "title": "चेक-इन डिजिटल टोकन (Scan QR at Clinic Desk)",
                 "qr_payload": payload_str,
                 "qr_visual": qr_ascii_preview,
             },
@@ -235,17 +406,18 @@ def make_booking_receipt_card(
             {
                 "type": "button",
                 "action_id": "ACTION_SIMULATE_CHECKIN",
-                "label": "📲 अस्पताल चेक-इन सिमुलेट करें (Simulate Desk Check-in)",
+                "label": "📲 अस्पताल चेक-इन (Check-in)",
                 "style": "primary",
                 "payload": {
                     "action": "clinic_checkin",
                     "ticket_id": ticket_id,
+                    "qr_token": payload_str,
                 },
             },
             {
                 "type": "button",
                 "action_id": "ACTION_VIEW_DOSSIER",
-                "label": "📋 डॉक्टर क्लिनिकल डोजियर देखें (View Doctor's Dossier)",
+                "label": "📋 डोजियर देखें (View Dossier)",
                 "style": "secondary",
                 "payload": {
                     "action": "view_dossier",
@@ -255,6 +427,10 @@ def make_booking_receipt_card(
         ],
     }
 
+    # Validate against Pydantic schema
+    InteractiveCard.model_validate(card_dict)
+    return card_dict
+
 
 def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, Any]:
     """
@@ -263,7 +439,7 @@ def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, An
     """
     detected_reasons = reasons or ["गंभीर लक्षण पाए गए (Critical red flag symptoms detected)"]
 
-    return {
+    card_dict = {
         "card_type": "emergency_sos",
         "version": "1.0",
         "theme": {
@@ -272,7 +448,7 @@ def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, An
             "badge_text": "#991B1B",
         },
         "header": {
-            "title": "🚨 आपातकालीन चेतावनी (CRITICAL EMERGENCY ALERT)",
+            "title": "🚨 आपातकालीन चेतावनी (EMERGENCY ALERT)",
             "badge": "108 SOS तत्काल कॉल करें",
         },
         "sections": [
@@ -297,7 +473,7 @@ def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, An
             {
                 "type": "button",
                 "action_id": "ACTION_CALL_108",
-                "label": "📞 108 एम्बुलेंस डायल करें (Call 108 Ambulance)",
+                "label": "📞 108 डायल करें (Call 108)",
                 "style": "danger",
                 "url": "tel:108",
                 "payload": {"action": "emergency_call", "number": "108"},
@@ -305,9 +481,13 @@ def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, An
             {
                 "type": "button",
                 "action_id": "ACTION_FIND_ER",
-                "label": "📍 निकटतम आपातकालीन अस्पताल खोजें (Find Nearest ER)",
+                "label": "📍 निकटतम ER खोजें (Find ER)",
                 "style": "secondary",
                 "payload": {"action": "find_emergency_center"},
             },
         ],
     }
+
+    # Validate against Pydantic schema
+    InteractiveCard.model_validate(card_dict)
+    return card_dict

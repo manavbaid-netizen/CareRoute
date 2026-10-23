@@ -16,6 +16,8 @@ from models.cards import (
     make_booking_receipt_card,
     make_emergency_sos_card,
     card_to_markdown,
+    create_card_chat,
+    parse_card_action,
 )
 from models.chat_models import (
     ChatMessage,
@@ -189,20 +191,15 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
         session_store.save_session(sender, session)
         ctx.logger.info(f"👤 Patient name identified: {extracted}")
 
-    # 1. Parse JSON button action if present
-    action_data: Optional[Dict[str, Any]] = None
-    if user_text.startswith("{") and user_text.endswith("}"):
-        try:
-            action_data = json.loads(user_text)
-        except json.JSONDecodeError:
-            pass
+    # 1. Parse JSON button action or numeric choice
+    action_data: Optional[Dict[str, Any]] = parse_card_action(user_text)
 
     # 2. Check for action triggers
     if action_data and "action" in action_data:
         action = action_data.get("action")
 
         if action == "view_slots":
-            specialty = action_data.get("specialty", "General Medicine")
+            specialty = action_data.get("specialty", session.get("recommended_specialty", "General Medicine"))
             session["state"] = "STATE_SLOT_SELECTED"
             session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
             session_store.save_session(sender, session)
@@ -260,6 +257,35 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                     ),
                 )
             return
+
+        elif action == "numeric_choice" and session["state"] == "STATE_SLOT_SELECTED" and session.get("available_slots"):
+            choice_num = action_data.get("choice", 1)
+            slots = session["available_slots"]
+            if 1 <= choice_num <= len(slots):
+                chosen = slots[choice_num - 1]
+                session["selected_slot"] = chosen
+                session["state"] = "STATE_PAYMENT_PENDING"
+                dossier_id = session.get("dossier_id")
+                if not dossier_id:
+                    await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
+                    return
+
+                session["pending_request"] = {"type": "booking", "sent_at": time.time(), "retries": 0}
+                session_store.save_session(sender, session)
+
+                if WORKER_ADDRESSES["logistics"]:
+                    await ctx.send(
+                        WORKER_ADDRESSES["logistics"],
+                        BookingCommitRequest(
+                            session_id=sender,
+                            patient_id=session["patient_id"],
+                            patient_name=session["patient_name"],
+                            slot_id=chosen["slot_id"],
+                            dossier_id=dossier_id,
+                            user_address=sender,
+                        ),
+                    )
+                return
 
     # 3. Handle fallback numeric slot choices (e.g. user typed '1', '2', or 'स्लॉट')
     if session["state"] == "STATE_SLOT_SELECTED" and session.get("available_slots"):
@@ -366,8 +392,7 @@ async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisR
     if msg.is_emergency:
         session["state"] = "STATE_EMERGENCY"
         card = make_emergency_sos_card(reasons=msg.emergency_reasons)
-        full_text = f"{msg.hindi_summary}\n\n{card_to_markdown(card)}"
-        await ctx.send(user_addr, create_text_chat(full_text))
+        await ctx.send(user_addr, create_card_chat(msg.hindi_summary, card))
         ctx.logger.warning(f"🚨 Dispatched Emergency SOS to user {user_addr}")
     else:
         session["state"] = "STATE_TRIAGE_PRESENTED"
@@ -378,8 +403,7 @@ async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisR
             pre_visit_advice=pre_visit,
             differentials=differentials,
         )
-        full_text = f"{msg.hindi_summary}\n\n{card_to_markdown(card)}"
-        await ctx.send(user_addr, create_text_chat(full_text))
+        await ctx.send(user_addr, create_card_chat(msg.hindi_summary, card))
         ctx.logger.info(f"✅ Dispatched Triage Card to user {user_addr}")
 
     session_store.save_session(user_addr, session)
@@ -409,8 +433,7 @@ async def handle_slot_response(ctx: Context, sender: str, msg: SlotQueryResponse
         f"🏥 **{msg.clinic_name}** में {msg.doctor_name} ({msg.room_no}) "
         f"के परामर्श के लिए निम्नलिखित ओपीडी समय उपलब्ध हैं:"
     )
-    full_text = f"{intro_text}\n\n{card_to_markdown(card)}"
-    await ctx.send(user_addr, create_text_chat(full_text))
+    await ctx.send(user_addr, create_card_chat(intro_text, card))
     ctx.logger.info(f"📅 Dispatched Slot Picker to user {user_addr} ({len(msg.slots)} slots)")
     session_store.save_session(user_addr, session)
 
@@ -487,8 +510,8 @@ async def handle_escrow_lock_response(ctx: Context, sender: str, msg: EscrowLock
         qr_data=qr_payload,
     )
 
-    full_text = f"🎉 **आपकी ओपीडी बुकिंग सफलतापूर्वक सुनिश्चित हो गई है!**\n\n{card_to_markdown(card)}"
-    await ctx.send(user_addr, create_text_chat(full_text))
+    intro_text = "🎉 **आपकी ओपीडी बुकिंग सफलतापूर्वक सुनिश्चित हो गई है!**"
+    await ctx.send(user_addr, create_card_chat(intro_text, card))
     ctx.logger.info(f"🎟️ Final Booking Receipt dispatched to user {user_addr} for Ticket {ticket_id}")
     session_store.save_session(user_addr, session)
 

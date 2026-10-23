@@ -21,8 +21,8 @@
 | Phase 5 | ASI1 LLM core reasoning engine | ✅ DONE | OpenAI-compatible ASI:One client with multi-tier fallback (ASI1 -> Gemini -> OpenAI -> Deterministic), error correction retry, honest vision handling, provenance |
 | Phase 8 | Real Payment Protocol & secure escrow | ✅ DONE | Official `payment_protocol_spec` with `seller` role, `CommitPayment` handler, SQLite `escrow` table (single source of truth), clinic desk auth, double-refund prevention, honest simulation labelling |
 | Phase 9 | Booking logic & capacity | ✅ DONE | Atomic capacity decrement, per-date slots, Specialty enum, honest slot errors, foreign keys, deterministic patient identity |
-| Phase 10 | ASI1 Interactive Cards | ⏳ NEXT | Interactive Card schemas with robust text fallback |
-| Phase 11 | Orchestration & Tools | ⏳ PENDING | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator |
+| Phase 10 | ASI1 Interactive Cards | ✅ DONE | Pydantic v2 InteractiveCard schema, MetadataContent ACP packaging, mobile touch labels, robust numbered text fallback, action parsing |
+| Phase 11 | Orchestration & Tools | ⏳ NEXT | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator, agent health check |
 | Phase 12 | Tests, CI, Docs & README | ⏳ PENDING | GitHub CI, updated README with badges, Devpost demo script |
 
 ---
@@ -114,6 +114,21 @@
   - `tests/test_phase9_booking.py`: Added 7 tests covering JSON roster loading, specialty enum mapping, atomic capacity limit, per-date slot isolation, unknown slot rejection, patient identity derivation, and SQLite foreign key constraints.
   - `tests/test_phase4_dossier.py`, `tests/test_phase8_escrow.py`, `test_careroute.py`: Reset test slot capacities in test fixtures.
   - `pyproject.toml`: Configured `norecursedirs` to ignore `.venv`, preventing pytest recursive scan delays.
-- **Tests Passing**: 52/52 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 10 (ASI1 Interactive Cards).
-- **Exact Next Step**: Phase 10 — Review ASI:One Interactive Cards (`models/cards.py`), add Pydantic schemas or validation for interactive card payloads, implement robust plain-text markdown fallbacks (`card_to_markdown()`), support interactive actions/buttons with fallbacks, write `tests/test_phase10_cards.py`.
+- **Tests Passing**: 52/52 tests passing at Phase 9.
+## Phase 10 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6, Phase 5, Phase 8, Phase 9, Phase 10
+- **Files Changed**:
+  - `models/cards.py`:
+    - Defined Pydantic v2 schemas: `CardAction`, `CardHeader`, `CardFact`, `CardSection`, `CardTheme`, `InteractiveCard`.
+    - Rebuilt all 4 card generators (`make_triage_detail_card`, `make_slot_picker_card`, `make_booking_receipt_card`, `make_emergency_sos_card`) with strict Pydantic model validation.
+    - Implemented `card_to_markdown()` for plain-text fallback with explicit numbered touch targets (`[1]`, `[2]`, `[3]`).
+    - Implemented `create_card_chat()` ACP helper emitting both accessible `TextContent` and `MetadataContent(card_kind, card_payload)` for native ASI:One UI rendering when `USE_INTERACTIVE_CARDS=True` (or text-only when `False`).
+    - Added `parse_card_action()` to parse native JSON button tap payloads or numeric text choices ("1", "2", "#3").
+    - Formatted concise, mobile-friendly button labels (e.g. `🕒 10:00 AM - 10:30 AM (3 बचे)`).
+  - `agents/dispatcher.py`:
+    - Replaced raw text calls with `create_card_chat()` across triage, slot query, and escrow lock responses.
+    - Wired `parse_card_action()` into user message loop, cleanly handling button action JSON and numeric slot choices.
+  - `tests/test_phase10_cards.py`: Added 10 tests covering schema validation for all 4 card types, markdown fallback formatting, ACP dual-content packaging (`TextContent` + `MetadataContent`), disabled interactive flag fallback, button JSON action parsing, numeric fallback choices, and mobile label length constraints.
+- **Tests Passing**: 62/62 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 11 (Orchestration Quality & Real Tools).
+- **Exact Next Step**: Phase 11 — Implement correlation IDs, request timeouts and retries in Dispatcher, OpenStreetMap/Overpass local CHC locator tool with offline fallback and caching, startup health check, rate limiting, and write `tests/test_phase11_orchestration.py`.
