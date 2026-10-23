@@ -7,6 +7,7 @@ import logging
 from typing import Tuple, List, Dict, Any, Optional
 
 from config import Config
+from services.safety import SafetyService
 from models.clinical_schemas import (
     ClinicalDossier,
     SubjectiveSOAP,
@@ -76,25 +77,11 @@ class VLMService:
 
     def scan_safety_tripwires(self, text: str) -> Tuple[bool, List[str]]:
         """
-        Scan input text for high-risk red-flag symptoms.
-        Returns (is_emergency, list_of_reasons).
+        Scan input text for acute life-threatening emergencies using layered SafetyService.
+        Returns (is_emergency, list_of_specific_reasons).
         """
-        lower_text = text.lower()
-        reasons = []
-
-        if any(keyword in text or keyword in lower_text for keyword in self.RED_FLAGS["chest_pain"]):
-            reasons.append("तीव्र सीने में दर्द / संभावित हृदय संबंधी आपातकाल (Severe Chest Pain / Acute Coronary Syndrome)")
-
-        if any(keyword in text or keyword in lower_text for keyword in self.RED_FLAGS["respiratory_distress"]):
-            reasons.append("गंभीर श्वसन संकट / सांस लेने में अत्यधिक कठिनाई (Severe Respiratory Distress / Acute Dyspnea)")
-
-        if any(keyword in text or keyword in lower_text for keyword in self.RED_FLAGS["profuse_bleeding"]):
-            reasons.append("रक्तस्राव / खून की उल्टी अथवा बलगम में खून (Active Hemorrhage / Hemoptysis)")
-
-        if any(keyword in text or keyword in lower_text for keyword in self.RED_FLAGS["altered_sensorium"]):
-            reasons.append("अचेत अवस्था / बेहोशी अथवा भ्रम (Altered Consciousness / Lethargy / Shock)")
-
-        return (len(reasons) > 0, reasons)
+        is_em, reasons, _ = SafetyService.scan_for_emergencies(text)
+        return is_em, reasons
 
     def analyze_case(
         self,

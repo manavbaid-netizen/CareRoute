@@ -16,9 +16,9 @@
 | Phase 2 | Real ACP in Dispatcher | ✅ DONE | Real `chat_protocol_spec` included, ACKs + ChatMessage replies at every step, sessions keyed by sender address, SQLite session persistence |
 | Phase 3 | Agentverse registration & discoverability | ✅ DONE | Mailbox mode parameters verified & wired, agentverse_readme.md, topology documented, check_registration.py |
 | Phase 4 | Doctor dossier persistence | ✅ DONE | Dossier saved right after triage, real dossier_id propagated, Pydantic v2 model_validate_json/model_dump, retention cleanup, verified agent-driven flow |
-| Phase 5 | ASI1 LLM core reasoning engine | ⏳ NEXT | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
-| Phase 6 | Clinical safety, zero fabrication | ⏳ PENDING | Remove fake vitals/history/Rx from fallback, ask clarifications |
-| Phase 7 | Emergency detection & 108 SOS tripwires | ⏳ PENDING | Layered regex + Devanagari/Hinglish safety rules + 60+ test cases |
+| Phase 7 | Emergency detection & 108 SOS tripwires | ✅ DONE | Layered regex + Devanagari/Hinglish safety rules + Tele-MANAS/108 helplines + 65-case red flag corpus (100% recall) |
+| Phase 6 | Clinical safety, zero fabrication | ⏳ NEXT | Remove fake vitals/history/Rx from fallback, ask clarifications |
+| Phase 5 | ASI1 LLM core reasoning engine | ⏳ PENDING | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
 | Phase 8 | Real Payment Protocol & secure escrow | ⏳ PENDING | `payment_protocol_spec`, SQLite source of truth, clinic auth |
 | Phase 9 | Booking logic & capacity | ⏳ PENDING | Atomic capacity decrement, slot dates, json roster, foreign keys |
 | Phase 10 | ASI1 Interactive Cards | ⏳ PENDING | Interactive Card schemas with robust text fallback |
@@ -64,6 +64,14 @@
   - `agents/logistics_worker.py`: Loads the real dossier by `msg.dossier_id`, saves ticket-indexed slip, updates DB `dossier_path`, returns `ERROR_MISSING_DOSSIER` on failure.
   - `services/clinic_roster.py`: Added schema migration for `dossier_path`, `slot_date`, `qr_hash` and `update_dossier_path` method.
   - `tests/test_phase4_dossier.py`: 4 tests verifying Pydantic v2 roundtrip, data retention cleanup, agent-driven file persistence, and rejection of missing dossier IDs.
-- **Tests Passing**: 15/15 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 5 (ASI1 LLM core reasoning engine).
-- **Exact Next Step**: Phase 5 — Create `services/llm_client.py` for official ASI:One API (OpenAI-compatible), implement strict JSON triage validation against `ClinicalDossier`, handle timeouts/retries, integrate with VLMService, vision fallback with honesty (never pretend an image was read).
+## Phase 7 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7
+- **Files Changed**:
+  - `services/safety.py`: Created layered `SafetyService` covering 16+ acute life-threatening categories (cardiac chest pain, breathlessness, cyanosis, hemoptysis, unconsciousness, seizures, stroke, snake/animal bites, poisoning, burns, obstetric emergencies, suicidal crisis, meningitis). Added clause-aware negation handling preventing false positives (e.g. "no chest pain", "सीने में दर्द नहीं है") without cancelling distinct negative clauses (e.g. "बेहोश हो गया और उठ नहीं रहा"). Configured verified Indian national helplines: 108 Ambulance, 112 National Emergency, Tele-MANAS (14416 / 1800-891-4416), and Kiran (1800-599-0019).
+  - `data/redflag_test_cases.json`: Created 65 labelled test cases in Hindi, Hinglish, and English covering all critical categories, negative controls, and negation variants.
+  - `services/vlm_service.py`: Replaced crude keyword scan with `SafetyService.scan_for_emergencies()`; updated tripwire response generation to incorporate category-specific actions and Tele-MANAS mental health helplines.
+  - `main.py`: Updated Scenario 2 to verify live detection of life-threatening emergencies with real assertions.
+  - `tests/test_phase7_redflags.py`: Added 7 comprehensive tests verifying Finding 7 exact phrases, previously missed phrases, negation controls, Tele-MANAS routing, and full 65-case corpus achieving 100% recall.
+- **Tests Passing**: 22/22 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 6 (Clinical safety, zero fabrication) and Phase 5 (ASI1 LLM core reasoning engine).
+- **Exact Next Step**: Phase 6 — Strip fabricated vitals (Temp 99.8F, SpO2 97%, RR 20), fake PMH, and fake prescriptions from fallback engine in `services/vlm_service.py`; default vitals to empty dict `{}` and PMH to `[]`; route unclassified inputs to General Medicine "unclassified, needs clarification" rather than TB; implement max 3 clarifying questions; add clinical disclaimers.

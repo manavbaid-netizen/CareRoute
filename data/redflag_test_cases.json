@@ -1,0 +1,392 @@
+[
+  {
+    "id": "tc_01",
+    "text": "सीने में बहुत तेज दर्द हो रहा है और सांस लेने में भारी तकलीफ है",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_02",
+    "text": "सीने में दर्द",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_03",
+    "text": "seene mein dard",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_04",
+    "text": "saans nahi aa rahi",
+    "expected_emergency": true,
+    "category": "respiratory_distress"
+  },
+  {
+    "id": "tc_05",
+    "text": "बलगम में खून आ रहा है",
+    "expected_emergency": true,
+    "category": "active_hemorrhage_hemoptysis"
+  },
+  {
+    "id": "tc_06",
+    "text": "patient having severe seizures and jerking",
+    "expected_emergency": true,
+    "category": "seizures_convulsions"
+  },
+  {
+    "id": "tc_07",
+    "text": "I feel suicidal and want to end my life",
+    "expected_emergency": true,
+    "category": "suicidal_ideation"
+  },
+  {
+    "id": "tc_08",
+    "text": "खेत में काम करते हुए सांप ने काट लिया है",
+    "expected_emergency": true,
+    "category": "snake_or_animal_bite"
+  },
+  {
+    "id": "tc_09",
+    "text": "snake bite on right foot, swelling fast",
+    "expected_emergency": true,
+    "category": "snake_or_animal_bite"
+  },
+  {
+    "id": "tc_10",
+    "text": "गर्भवती महिला को अचानक बहुत खून बह रहा है",
+    "expected_emergency": true,
+    "category": "obstetric_emergency"
+  },
+  {
+    "id": "tc_11",
+    "text": "heavy pregnancy bleeding in 7th month",
+    "expected_emergency": true,
+    "category": "obstetric_emergency"
+  },
+  {
+    "id": "tc_12",
+    "text": "no chest pain, just mild back ache",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_13",
+    "text": "सीने में दर्द नहीं है, सिर्फ हल्का जुकाम है",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_14",
+    "text": "छाती में कोई दर्द नहीं है",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_15",
+    "text": "seene mein dard nahi hai, pair me moch hai",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_16",
+    "text": "denies chest pain and denies breathlessness",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_17",
+    "text": "patient without chest pain, reports mild rash",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_18",
+    "text": "khoon ki ulti nahi hui hai",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_19",
+    "text": "मरीज को अचानक छाती में भारी दबाव और पसीना आ रहा है",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_20",
+    "text": "crushing chest pain radiating to left arm and jaw",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_21",
+    "text": "chhati me bahut tez dard ho raha hai",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_22",
+    "text": "heart attack suspected, patient clutching chest",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  },
+  {
+    "id": "tc_23",
+    "text": "मरीज का दम घुट रहा है और होंठ नीले पड़ रहे हैं",
+    "expected_emergency": true,
+    "category": "respiratory_distress"
+  },
+  {
+    "id": "tc_24",
+    "text": "severe breathlessness, blue lips and gasping for air",
+    "expected_emergency": true,
+    "category": "respiratory_distress"
+  },
+  {
+    "id": "tc_25",
+    "text": "saans lene me bahut takleef ho rahi hai",
+    "expected_emergency": true,
+    "category": "respiratory_distress"
+  },
+  {
+    "id": "tc_26",
+    "text": "dam ghut raha hai, bilkul saans nahi aa rahi",
+    "expected_emergency": true,
+    "category": "respiratory_distress"
+  },
+  {
+    "id": "tc_27",
+    "text": "मरीज को खून की उल्टी हो रही है",
+    "expected_emergency": true,
+    "category": "active_hemorrhage_hemoptysis"
+  },
+  {
+    "id": "tc_28",
+    "text": "coughing large amounts of fresh red blood",
+    "expected_emergency": true,
+    "category": "active_hemorrhage_hemoptysis"
+  },
+  {
+    "id": "tc_29",
+    "text": "balgam mein khoon dikha",
+    "expected_emergency": true,
+    "category": "active_hemorrhage_hemoptysis"
+  },
+  {
+    "id": "tc_30",
+    "text": "uncontrolled profuse bleeding from leg wound",
+    "expected_emergency": true,
+    "category": "active_hemorrhage_hemoptysis"
+  },
+  {
+    "id": "tc_31",
+    "text": "मरीज अचानक गिरकर बेहोश हो गया और उठ नहीं रहा",
+    "expected_emergency": true,
+    "category": "unconsciousness_coma_shock"
+  },
+  {
+    "id": "tc_32",
+    "text": "unconscious and completely unresponsive on the floor",
+    "expected_emergency": true,
+    "category": "unconsciousness_coma_shock"
+  },
+  {
+    "id": "tc_33",
+    "text": "patient behosh hai, aankhein nahi khol raha",
+    "expected_emergency": true,
+    "category": "unconsciousness_coma_shock"
+  },
+  {
+    "id": "tc_34",
+    "text": "मिर्गी का दौरा पड़ा है और हाथ पैर कांप रहे हैं",
+    "expected_emergency": true,
+    "category": "seizures_convulsions"
+  },
+  {
+    "id": "tc_35",
+    "text": "daure pad rahe hain, munh se jhaag aa raha hai",
+    "expected_emergency": true,
+    "category": "seizures_convulsions"
+  },
+  {
+    "id": "tc_36",
+    "text": "अचानक चेहरे का आधा हिस्सा टेढ़ा हो गया और बोली लड़खड़ा रही है",
+    "expected_emergency": true,
+    "category": "stroke_signs"
+  },
+  {
+    "id": "tc_37",
+    "text": "sudden facial droop, slurred speech and right arm weakness",
+    "expected_emergency": true,
+    "category": "stroke_signs"
+  },
+  {
+    "id": "tc_38",
+    "text": "lakwa mar gaya hai, ek taraf ka sharir sunn hai",
+    "expected_emergency": true,
+    "category": "stroke_signs"
+  },
+  {
+    "id": "tc_39",
+    "text": "बच्चे ने गलती से कीटनाशक दवाई पी ली है",
+    "expected_emergency": true,
+    "category": "poisoning_overdose"
+  },
+  {
+    "id": "tc_40",
+    "text": "accidental pesticide ingestion, foaming at mouth",
+    "expected_emergency": true,
+    "category": "poisoning_overdose"
+  },
+  {
+    "id": "tc_41",
+    "text": "zeher kha liya hai, ulti kar raha hai",
+    "expected_emergency": true,
+    "category": "poisoning_overdose"
+  },
+  {
+    "id": "tc_42",
+    "text": "रसोई गैस सिलेंडर फटने से शरीर बुरी तरह झुलस गया है",
+    "expected_emergency": true,
+    "category": "severe_burns"
+  },
+  {
+    "id": "tc_43",
+    "text": "severe 3rd degree burns across chest and arms",
+    "expected_emergency": true,
+    "category": "severe_burns"
+  },
+  {
+    "id": "tc_44",
+    "text": "aag se jhulas gaya hai poora badan",
+    "expected_emergency": true,
+    "category": "severe_burns"
+  },
+  {
+    "id": "tc_45",
+    "text": "गर्भावस्था में 8वें महीने में बच्चा हिल नहीं रहा और दर्द है",
+    "expected_emergency": true,
+    "category": "obstetric_emergency"
+  },
+  {
+    "id": "tc_46",
+    "text": "garbhvati mahila ko bleeding shuru ho gayi hai",
+    "expected_emergency": true,
+    "category": "obstetric_emergency"
+  },
+  {
+    "id": "tc_47",
+    "text": "मुझे जीने की इच्छा नहीं है, आत्महत्या करने का मन कर रहा है",
+    "expected_emergency": true,
+    "category": "suicidal_ideation"
+  },
+  {
+    "id": "tc_48",
+    "text": "marne ka man kar raha hai, khudkushi karna chahta hu",
+    "expected_emergency": true,
+    "category": "suicidal_ideation"
+  },
+  {
+    "id": "tc_49",
+    "text": "severe allergic reaction, throat is swelling shut",
+    "expected_emergency": true,
+    "category": "severe_allergic_anaphylaxis"
+  },
+  {
+    "id": "tc_50",
+    "text": "तेज बुखार के साथ गर्दन पूरी तरह अकड़ गई है और झुक नहीं रही",
+    "expected_emergency": true,
+    "category": "meningitis_signs"
+  },
+  {
+    "id": "tc_51",
+    "text": "high fever and stiff neck, suspected acute meningitis",
+    "expected_emergency": true,
+    "category": "meningitis_signs"
+  },
+  {
+    "id": "tc_52",
+    "text": "मेरे पैर में चोट लगी है और खरोंच आ गई है",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_53",
+    "text": "I have a headache and feel dizzy since yesterday",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_54",
+    "text": "मुझे दो दिन से बुखार है और बदन दर्द कर रहा है",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_55",
+    "text": "मेरी त्वचा पर लाल चकत्ते हैं और खुजली हो रही है",
+    "expected_emergency": false,
+    "category": "routine_derm"
+  },
+  {
+    "id": "tc_56",
+    "text": "itching rash on both hands with ring shaped borders",
+    "expected_emergency": false,
+    "category": "routine_derm"
+  },
+  {
+    "id": "tc_57",
+    "text": "do hafte se sham ko halka bukhar aur khansi hai",
+    "expected_emergency": false,
+    "category": "routine_pulm"
+  },
+  {
+    "id": "tc_58",
+    "text": "हल्का पेट दर्द है खाना खाने के बाद",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_59",
+    "text": "mild sore throat and runny nose for 3 days",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_60",
+    "text": "घुटने में दर्द है चलते समय",
+    "expected_emergency": false,
+    "category": "routine_general"
+  },
+  {
+    "id": "tc_61",
+    "text": "saap nahi kata hai, bas chot lagi hai",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_62",
+    "text": "मरीज को कोई दौरा नहीं पड़ा, सिर्फ कमजोरी है",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_63",
+    "text": "no bleeding, no vomiting, vitals stable",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_64",
+    "text": "गर्भावस्था में उल्टी हो रही है सुबह, कोई खून नहीं है",
+    "expected_emergency": false,
+    "category": "negated"
+  },
+  {
+    "id": "tc_65",
+    "text": "सीने में बहुत तेज दर्द",
+    "expected_emergency": true,
+    "category": "cardiac_chest_pain"
+  }
+]

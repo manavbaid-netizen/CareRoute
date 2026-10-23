@@ -322,6 +322,11 @@ def run_interactive_demo() -> None:
         text_transcript=emergency_text,
     )
 
+    # Real clinical safety verification
+    assert em_is_emergency, "CRITICAL ERROR: Emergency tripwire failed to detect life threat!"
+    assert len(em_reasons) >= 1, "CRITICAL ERROR: Emergency reasons list must not be empty!"
+    assert not any("Critical red flag symptoms detected" in r for r in em_reasons), "Generic placeholder reason detected!"
+
     emergency_card = make_emergency_sos_card(em_reasons)
 
     console.print(
