@@ -8,6 +8,7 @@ from typing import Tuple, List, Dict, Any, Optional
 
 from config import Config
 from services.safety import SafetyService
+from services.llm_client import LLMClient, HONEST_VISION_NOTE_HI
 from models.clinical_schemas import (
     ClinicalDossier,
     SubjectiveSOAP,
@@ -61,30 +62,8 @@ class VLMService:
     }
 
     def __init__(self) -> None:
-        self.use_mock = Config.USE_MOCK_VLM or (not Config.GEMINI_API_KEY and not Config.OPENAI_API_KEY)
-        self.gemini_client = None
-        self.openai_client = None
-
-        if not self.use_mock:
-            self._init_api_clients()
-
-    def _init_api_clients(self) -> None:
-        """Initialize Google GenAI or OpenAI clients if API keys are provided."""
-        if Config.GEMINI_API_KEY:
-            try:
-                from google import genai
-                self.gemini_client = genai.Client(api_key=Config.GEMINI_API_KEY)
-                logger.info("Initialized Google GenAI VLM client.")
-            except Exception as e:
-                logger.warning(f"Could not initialize google-genai: {e}. Checking fallback.")
-
-        if Config.OPENAI_API_KEY and not self.gemini_client:
-            try:
-                from openai import OpenAI
-                self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-                logger.info("Initialized OpenAI VLM client.")
-            except Exception as e:
-                logger.warning(f"Could not initialize openai client: {e}.")
+        self.use_mock = Config.USE_MOCK_VLM or (not Config.ASI1_API_KEY and not Config.GEMINI_API_KEY and not Config.OPENAI_API_KEY)
+        self.llm_client = LLMClient(fallback_engine=self)
 
     def scan_safety_tripwires(self, text: str) -> Tuple[bool, List[str]]:
         """
@@ -106,6 +85,7 @@ class VLMService:
         """
         Execute clinical triage and return:
         (ClinicalDossier, hindi_patient_summary, is_emergency, emergency_reasons)
+        Delegates through multi-tier LLMClient with zero-fabrication safety fallback.
         """
         # Step 1: Scan for life-threatening emergency tripwires immediately
         is_emergency, emergency_reasons = self.scan_safety_tripwires(text_transcript)
@@ -117,25 +97,20 @@ class VLMService:
             hindi_summary = (
                 "⚠️ **तत्काल आपातकालीन चेतावनी**: आपके बताए लक्षणों में गंभीर खतरे के संकेत हैं। "
                 "कृपया तुरंत नजदीकी अस्पताल के इमरजेंसी कक्ष (ER) में जाएं या 108 पर कॉल करें।"
+                f"\n\n{CLINICAL_DISCLAIMER_HI}"
             )
             return dossier, hindi_summary, True, emergency_reasons
 
-        # Step 2: If mock fallback is active or live API is not configured
-        if self.use_mock or (not self.gemini_client and not self.openai_client):
-            return self._mock_clinical_analysis(
-                session_id, patient_id, patient_name, text_transcript, image_data, image_type
-            )
-
-        # Step 3: Attempt live LLM/VLM processing with fallback
-        try:
-            return self._live_vlm_analysis(
-                session_id, patient_id, patient_name, text_transcript, image_data, image_type
-            )
-        except Exception as exc:
-            logger.error(f"Live VLM call failed ({exc}), gracefully falling back to deterministic clinical engine.")
-            return self._mock_clinical_analysis(
-                session_id, patient_id, patient_name, text_transcript, image_data, image_type
-            )
+        # Step 2: Route through unified multi-tier LLM reasoning client
+        # Priority: ASI:One (OpenAI-compatible) -> Gemini -> OpenAI -> Deterministic Fallback
+        return self.llm_client.generate_clinical_dossier(
+            session_id=session_id,
+            patient_id=patient_id,
+            patient_name=patient_name,
+            text_transcript=text_transcript,
+            image_data=image_data,
+            image_type=image_type,
+        )
 
     def _build_emergency_dossier(
         self,
@@ -376,16 +351,8 @@ class VLMService:
             )
 
         elif is_derm:
-            findings = []
-            if image_type == "lesion_photo":
-                findings.append(
-                    PhysicalFinding(
-                        body_location="Affected skin area",
-                        morphology="Reported cutaneous rash / erythematous lesion",
-                        severity="Moderate",
-                        suspicion="Cutaneous dermatosis / Superficial fungal infection",
-                    )
-                )
+            # Never fabricate image findings when vision model is inactive
+            findings: List[PhysicalFinding] = []
 
             dossier = ClinicalDossier(
                 dossier_id=dossier_id,

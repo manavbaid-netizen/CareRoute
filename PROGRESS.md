@@ -18,8 +18,8 @@
 | Phase 4 | Doctor dossier persistence | ✅ DONE | Dossier saved right after triage, real dossier_id propagated, Pydantic v2 model_validate_json/model_dump, retention cleanup, verified agent-driven flow |
 | Phase 7 | Emergency detection & 108 SOS tripwires | ✅ DONE | Layered regex + Devanagari/Hinglish safety rules + Tele-MANAS/108 helplines + 65-case red flag corpus (100% recall) |
 | Phase 6 | Clinical safety, zero fabrication | ✅ DONE | Zero fabricated vitals/PMH/Rx, NTEP TB criteria (cough > 2w + B-symptoms), General Medicine default for unclassified, disclaimers, clarifying questions |
-| Phase 5 | ASI1 LLM core reasoning engine | ⏳ NEXT | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
-| Phase 8 | Real Payment Protocol & secure escrow | ⏳ PENDING | `payment_protocol_spec`, SQLite source of truth, clinic auth |
+| Phase 5 | ASI1 LLM core reasoning engine | ✅ DONE | OpenAI-compatible ASI:One client with multi-tier fallback (ASI1 -> Gemini -> OpenAI -> Deterministic), error correction retry, honest vision handling, provenance |
+| Phase 8 | Real Payment Protocol & secure escrow | ⏳ NEXT | `payment_protocol_spec`, SQLite source of truth, clinic auth |
 | Phase 9 | Booking logic & capacity | ⏳ PENDING | Atomic capacity decrement, slot dates, json roster, foreign keys |
 | Phase 10 | ASI1 Interactive Cards | ⏳ PENDING | Interactive Card schemas with robust text fallback |
 | Phase 11 | Orchestration & Tools | ⏳ PENDING | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator |
@@ -77,6 +77,12 @@
 - **Files Changed**:
   - `services/vlm_service.py`: Removed all fabricated clinical data: vitals default to empty `{}`; past medical history defaults to `[]`; OCR prescriptions default to `[]`. Prohibited medication prescribing in plan advice (non-pharmacological home care & comfort measures only). Replaced crude substring matching with robust Devanagari/English regexes. Enforced NTEP clinical criteria for TB suspect (strictly cough >= 2 weeks AND constitutional B-symptoms). Defaulted all unclassified and non-TB presentations to `General Medicine` ("Unclassified symptom presentation; needs in-person evaluation") instead of defaulting to TB. Added `get_clarifying_questions()` returning up to 3 polite Hindi questions when duration, name/age, or chronic conditions are missing. Added mandatory clinical disclaimers in Hindi and English (`CLINICAL_DISCLAIMER_HI` and `CLINICAL_DISCLAIMER_EN`) to every patient-facing message and doctor dossier.
   - `tests/test_phase6_safety.py`: Added 8 tests asserting: 10 unrelated symptoms (leg injury, headache/dizziness, acute fever 2d, rash, knee pain, stomach ache, sore throat, back strain, eye irritation, acute gastroenteritis) never trigger a TB workup; zero fabricated vitals; zero fabricated past medical history; zero fabricated prescriptions; NTEP criteria precision; word boundary safety; clinical disclaimers everywhere; and clarifying questions generation.
-- **Tests Passing**: 30/30 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 5 (ASI1 LLM core reasoning engine).
-- **Exact Next Step**: Phase 5 — Create `services/llm_client.py` for official ASI:One API (OpenAI-compatible), implement strict JSON triage validation against `ClinicalDossier`, handle timeouts/retries, integrate with VLMService, vision fallback with honesty (never pretend an image was read).
+## Phase 5 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6, Phase 5
+- **Files Changed**:
+  - `services/llm_client.py`: Created `LLMClient` with unified multi-tier fallback architecture: Primary ASI:One OpenAI-compatible endpoint (`ASI1_API_KEY`, `ASI1_BASE_URL`, `ASI1_MODEL`) -> Secondary Google Gemini (`gemini-2.5-flash`) -> Tertiary OpenAI (`gpt-4o-mini`) -> Deterministic clinical intelligence engine. Added clean JSON fence stripper and 1-attempt error correction retry prompt on schema validation failures. Implemented honest vision handling (`HONEST_VISION_NOTE_HI` / `HONEST_VISION_NOTE_EN`), honestly informing users when visual models are unavailable without hallucinating morphological lesions. Implemented strict provenance recording in `dossier.engine`.
+  - `services/vlm_service.py`: Integrated `LLMClient` into `VLMService.analyze_case()`; removed fake morphological hallucination from lesion photo branch.
+  - `tests/test_phase5_llm.py`: Added 7 tests covering valid JSON parsing, markdown fence stripping, malformed JSON retry recovery, persistent malformed fallback to deterministic engine, APITimeoutError handling, 401 AuthenticationError handling, honest vision fallback, and provenance tracking.
+- **Tests Passing**: 37/37 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 8 (Real Payment Protocol & Secure Escrow).
+- **Exact Next Step**: Phase 8 — Inspect `uagents_core.contrib.protocols.payment`, implement official `payment_protocol_spec` with `RequestPayment`, `CommitPayment`, `CompletePayment`; single source of truth in SQLite `escrow` table; clinic desk authentication with QR hash token; explicit simulation labelling when `PAYMENT_MODE=simulation`.
