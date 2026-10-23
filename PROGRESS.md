@@ -17,8 +17,8 @@
 | Phase 3 | Agentverse registration & discoverability | ✅ DONE | Mailbox mode parameters verified & wired, agentverse_readme.md, topology documented, check_registration.py |
 | Phase 4 | Doctor dossier persistence | ✅ DONE | Dossier saved right after triage, real dossier_id propagated, Pydantic v2 model_validate_json/model_dump, retention cleanup, verified agent-driven flow |
 | Phase 7 | Emergency detection & 108 SOS tripwires | ✅ DONE | Layered regex + Devanagari/Hinglish safety rules + Tele-MANAS/108 helplines + 65-case red flag corpus (100% recall) |
-| Phase 6 | Clinical safety, zero fabrication | ⏳ NEXT | Remove fake vitals/history/Rx from fallback, ask clarifications |
-| Phase 5 | ASI1 LLM core reasoning engine | ⏳ PENDING | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
+| Phase 6 | Clinical safety, zero fabrication | ✅ DONE | Zero fabricated vitals/PMH/Rx, NTEP TB criteria (cough > 2w + B-symptoms), General Medicine default for unclassified, disclaimers, clarifying questions |
+| Phase 5 | ASI1 LLM core reasoning engine | ⏳ NEXT | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
 | Phase 8 | Real Payment Protocol & secure escrow | ⏳ PENDING | `payment_protocol_spec`, SQLite source of truth, clinic auth |
 | Phase 9 | Booking logic & capacity | ⏳ PENDING | Atomic capacity decrement, slot dates, json roster, foreign keys |
 | Phase 10 | ASI1 Interactive Cards | ⏳ PENDING | Interactive Card schemas with robust text fallback |
@@ -72,6 +72,11 @@
   - `services/vlm_service.py`: Replaced crude keyword scan with `SafetyService.scan_for_emergencies()`; updated tripwire response generation to incorporate category-specific actions and Tele-MANAS mental health helplines.
   - `main.py`: Updated Scenario 2 to verify live detection of life-threatening emergencies with real assertions.
   - `tests/test_phase7_redflags.py`: Added 7 comprehensive tests verifying Finding 7 exact phrases, previously missed phrases, negation controls, Tele-MANAS routing, and full 65-case corpus achieving 100% recall.
-- **Tests Passing**: 22/22 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 6 (Clinical safety, zero fabrication) and Phase 5 (ASI1 LLM core reasoning engine).
-- **Exact Next Step**: Phase 6 — Strip fabricated vitals (Temp 99.8F, SpO2 97%, RR 20), fake PMH, and fake prescriptions from fallback engine in `services/vlm_service.py`; default vitals to empty dict `{}` and PMH to `[]`; route unclassified inputs to General Medicine "unclassified, needs clarification" rather than TB; implement max 3 clarifying questions; add clinical disclaimers.
+## Phase 6 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6
+- **Files Changed**:
+  - `services/vlm_service.py`: Removed all fabricated clinical data: vitals default to empty `{}`; past medical history defaults to `[]`; OCR prescriptions default to `[]`. Prohibited medication prescribing in plan advice (non-pharmacological home care & comfort measures only). Replaced crude substring matching with robust Devanagari/English regexes. Enforced NTEP clinical criteria for TB suspect (strictly cough >= 2 weeks AND constitutional B-symptoms). Defaulted all unclassified and non-TB presentations to `General Medicine` ("Unclassified symptom presentation; needs in-person evaluation") instead of defaulting to TB. Added `get_clarifying_questions()` returning up to 3 polite Hindi questions when duration, name/age, or chronic conditions are missing. Added mandatory clinical disclaimers in Hindi and English (`CLINICAL_DISCLAIMER_HI` and `CLINICAL_DISCLAIMER_EN`) to every patient-facing message and doctor dossier.
+  - `tests/test_phase6_safety.py`: Added 8 tests asserting: 10 unrelated symptoms (leg injury, headache/dizziness, acute fever 2d, rash, knee pain, stomach ache, sore throat, back strain, eye irritation, acute gastroenteritis) never trigger a TB workup; zero fabricated vitals; zero fabricated past medical history; zero fabricated prescriptions; NTEP criteria precision; word boundary safety; clinical disclaimers everywhere; and clarifying questions generation.
+- **Tests Passing**: 30/30 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 5 (ASI1 LLM core reasoning engine).
+- **Exact Next Step**: Phase 5 — Create `services/llm_client.py` for official ASI:One API (OpenAI-compatible), implement strict JSON triage validation against `ClinicalDossier`, handle timeouts/retries, integrate with VLMService, vision fallback with honesty (never pretend an image was read).
