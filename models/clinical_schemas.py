@@ -77,3 +77,9 @@ class ClinicalDossier(Model):
     plan: PlanSOAP
     is_emergency: bool = Field(False, description="Flag indicating critical emergency tripwire was triggered")
     emergency_tripwires_hit: List[str] = Field(default_factory=list, description="List of detected life-threatening warning signs")
+    session_id: Optional[str] = Field(None, description="Associated conversation session ID")
+    engine: Optional[str] = Field("ASI1 | safe_fallback", description="Reasoning engine provenance")
+    disclaimer: str = Field(
+        "Pre-visit triage support only. Not a formal diagnosis. Final clinical decisions rest with the attending CHC medical officer.",
+        description="Clinical safety disclaimer",
+    )

@@ -81,21 +81,30 @@ async def handle_booking_commit(
 
     # Persist and render Doctor's Clinical Dossier for the assigned ticket
     dossier = dossier_service.load_dossier(msg.dossier_id)
+    dossier_path = None
     if dossier:
         saved_paths = dossier_service.save_dossier(dossier, ticket_id=booking["ticket_id"])
+        dossier_path = saved_paths["md_path"]
+        roster_service.update_dossier_path(booking["ticket_id"], dossier_path)
         ctx.logger.info(
-            f"📄 Doctor's Clinical Intake Dossier generated at: {saved_paths['md_path']}"
+            f"📄 Doctor's Clinical Intake Dossier generated at: {dossier_path}"
+        )
+    else:
+        ctx.logger.error(
+            f"❌ Failed to locate clinical dossier '{msg.dossier_id}' for booking ticket {booking['ticket_id']}!"
         )
 
     response = BookingCommitResponse(
         session_id=msg.session_id,
         ticket_id=booking["ticket_id"],
+        patient_name=msg.patient_name,
         doctor_name=booking["doctor_name"],
         clinic_name=booking["clinic_name"],
         room_no=booking["room_no"],
         slot_time=booking["slot_time"],
         qr_payload=booking["qr_payload"],
-        status="CONFIRMED",
+        status="CONFIRMED" if dossier else "ERROR_MISSING_DOSSIER",
+        dossier_path=dossier_path,
     )
     ctx.logger.info(f"🎉 Appointment successfully confirmed! Ticket: {booking['ticket_id']}")
     await ctx.send(sender, response)

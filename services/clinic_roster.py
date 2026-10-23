@@ -34,12 +34,22 @@ class ClinicRosterService:
                     slot_id TEXT NOT NULL,
                     slot_time TEXT NOT NULL,
                     dossier_id TEXT NOT NULL,
+                    dossier_path TEXT DEFAULT '',
                     escrow_status TEXT NOT NULL,
                     booking_status TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )
                 """
             )
+            # Automatic schema migration for existing SQLite databases
+            cursor.execute("PRAGMA table_info(appointments)")
+            existing_cols = {col[1] for col in cursor.fetchall()}
+            if "dossier_path" not in existing_cols:
+                cursor.execute("ALTER TABLE appointments ADD COLUMN dossier_path TEXT DEFAULT ''")
+            if "slot_date" not in existing_cols:
+                cursor.execute("ALTER TABLE appointments ADD COLUMN slot_date TEXT DEFAULT ''")
+            if "qr_hash" not in existing_cols:
+                cursor.execute("ALTER TABLE appointments ADD COLUMN qr_hash TEXT DEFAULT ''")
             conn.commit()
 
     # Pre-configured Community Health Center Doctors (Alwar District CHC)
@@ -173,6 +183,16 @@ class ClinicRosterService:
             "qr_payload": qr_payload,
             "status": "CONFIRMED",
         }
+
+    def update_dossier_path(self, ticket_id: str, dossier_path: str) -> None:
+        """Record the persisted dossier file path for a confirmed booking."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE appointments SET dossier_path = ? WHERE ticket_id = ?",
+                (dossier_path, ticket_id),
+            )
+            conn.commit()
 
     def get_booking(self, ticket_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve booking record by ticket ID."""

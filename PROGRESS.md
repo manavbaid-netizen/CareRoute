@@ -15,8 +15,8 @@
 | Phase 1 | Repo hygiene, secret removal, .gitignore, config safety | ✅ DONE | Leaked seeds removed, seed generator created, .gitignore active |
 | Phase 2 | Real ACP in Dispatcher | ✅ DONE | Real `chat_protocol_spec` included, ACKs + ChatMessage replies at every step, sessions keyed by sender address, SQLite session persistence |
 | Phase 3 | Agentverse registration & discoverability | ✅ DONE | Mailbox mode parameters verified & wired, agentverse_readme.md, topology documented, check_registration.py |
-| Phase 4 | Doctor dossier persistence | ⏳ NEXT | Save before booking, Pydantic v2 model_dump_json/model_validate |
-| Phase 5 | ASI1 LLM core reasoning engine | ⏳ PENDING | Official ASI:One LLM API integration with fallback |
+| Phase 4 | Doctor dossier persistence | ✅ DONE | Dossier saved right after triage, real dossier_id propagated, Pydantic v2 model_validate_json/model_dump, retention cleanup, verified agent-driven flow |
+| Phase 5 | ASI1 LLM core reasoning engine | ⏳ NEXT | OpenAI-compatible client for ASI:One, structured JSON output, fallback engine |
 | Phase 6 | Clinical safety, zero fabrication | ⏳ PENDING | Remove fake vitals/history/Rx from fallback, ask clarifications |
 | Phase 7 | Emergency detection & 108 SOS tripwires | ⏳ PENDING | Layered regex + Devanagari/Hinglish safety rules + 60+ test cases |
 | Phase 8 | Real Payment Protocol & secure escrow | ⏳ PENDING | `payment_protocol_spec`, SQLite source of truth, clinic auth |
@@ -55,6 +55,15 @@
   - `agentverse_readme.md`: Created complete profile description with Hindi, Hinglish, English sample queries, clinical disclaimer, and Innovation Lab badges for ASI:One discovery.
   - `docs/topology.md`: Documented hybrid gateway pattern (public Dispatcher on Agentverse mailbox, internal workers on local IPC).
   - `scripts/check_registration.py`: Created script to query Almanac, inspect agent addresses, check discovery status, and output submission URLs.
-- **Tests Passing**: 11/11 tests passing.
-- **Open Items**: Proceeding to Phase 4 (Doctor dossier persistence).
-- **Exact Next Step**: Phase 4 — Persist dossier (.json + .md) immediately after triage, pass real `dossier_id` into booking, replace `.json()` with `model_dump_json(indent=2)` and `parse_obj` with `model_validate_json`, add `DATA_RETENTION_DAYS` cleanup helper, assert dossier files exist from agent interactions.
+## Phase 4 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4
+- **Files Changed**:
+  - `services/dossier_generator.py`: Updated `save_dossier` with Pydantic v2 `model_dump()`; `load_dossier` with `model_validate_json()`; added `cleanup_old_dossiers` for `DATA_RETENTION_DAYS`.
+  - `models/clinical_schemas.py`: Added `engine`, `session_id`, and `disclaimer` fields to `ClinicalDossier`.
+  - `agents/diagnostic_worker.py`: Immediately persists the synthesized dossier after triage; silenced full raw transcripts from INFO logs.
+  - `agents/logistics_worker.py`: Loads the real dossier by `msg.dossier_id`, saves ticket-indexed slip, updates DB `dossier_path`, returns `ERROR_MISSING_DOSSIER` on failure.
+  - `services/clinic_roster.py`: Added schema migration for `dossier_path`, `slot_date`, `qr_hash` and `update_dossier_path` method.
+  - `tests/test_phase4_dossier.py`: 4 tests verifying Pydantic v2 roundtrip, data retention cleanup, agent-driven file persistence, and rejection of missing dossier IDs.
+- **Tests Passing**: 15/15 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 5 (ASI1 LLM core reasoning engine).
+- **Exact Next Step**: Phase 5 — Create `services/llm_client.py` for official ASI:One API (OpenAI-compatible), implement strict JSON triage validation against `ClinicalDossier`, handle timeouts/retries, integrate with VLMService, vision fallback with honesty (never pretend an image was read).

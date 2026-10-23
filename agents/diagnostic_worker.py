@@ -4,6 +4,7 @@ import logging
 from uagents import Agent, Context
 from config import Config
 from services.vlm_service import VLMService
+from services.dossier_generator import DossierGeneratorService
 from models.chat_models import TriageAnalysisRequest, TriageAnalysisResponse
 
 logger = logging.getLogger("CareRoute.DiagnosticWorker")
@@ -17,6 +18,7 @@ diagnostic_worker = Agent(
 )
 
 vlm_service = VLMService()
+dossier_service = DossierGeneratorService()
 
 
 @diagnostic_worker.on_event("startup")
@@ -37,7 +39,7 @@ async def handle_triage_request(
     ctx.logger.info(
         f"📋 Received clinical triage request for session {msg.session_id} (Patient: {msg.patient_name})"
     )
-    ctx.logger.info(f"🗣️ Raw Vernacular Transcript: \"{msg.text_transcript[:60]}...\"")
+    ctx.logger.debug(f"🗣️ Raw Vernacular Transcript: \"{msg.text_transcript[:60]}...\"")
 
     # Execute Clinical Reasoning & SOAP Generation via VLM Service
     dossier, hindi_summary, is_emergency, emergency_reasons = vlm_service.analyze_case(
@@ -48,6 +50,10 @@ async def handle_triage_request(
         image_data=msg.image_data,
         image_type=msg.image_type,
     )
+
+    # Save the dossier immediately after triage synthesis so it exists for logistics worker
+    saved_paths = dossier_service.save_dossier(dossier)
+    ctx.logger.info(f"💾 Dossier saved: ID={dossier.dossier_id} at {saved_paths['json_path']}")
 
     if is_emergency:
         ctx.logger.warning(

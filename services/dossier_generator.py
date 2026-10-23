@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from config import Config
@@ -27,9 +28,10 @@ class DossierGeneratorService:
         json_path = self.storage_dir / f"{ref_id}.json"
         md_path = self.storage_dir / f"{ref_id}_opd_slip.md"
 
-        # 1. Save JSON
+        # 1. Save JSON using Pydantic v2-compatible dump
+        dumped_json = json.dumps(dossier.model_dump(), indent=2, ensure_ascii=False)
         with open(json_path, "w", encoding="utf-8") as f:
-            f.write(dossier.json(indent=2))
+            f.write(dumped_json)
 
         # 2. Render and save Doctor's High-Density Markdown Dossier
         md_content = self.render_doctor_markdown(dossier, ticket_id=ref_id)
@@ -44,8 +46,24 @@ class DossierGeneratorService:
         if not json_path.exists():
             return None
         with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return ClinicalDossier.parse_obj(data)
+            raw_content = f.read()
+            return ClinicalDossier.model_validate_json(raw_content)
+
+    def cleanup_old_dossiers(self, days: int = Config.DATA_RETENTION_DAYS) -> int:
+        """
+        Remove dossier JSON and markdown files older than retention threshold.
+        Returns count of removed files.
+        """
+        threshold = time.time() - (days * 86400)
+        removed = 0
+        for p in self.storage_dir.glob("*"):
+            if p.is_file() and p.stat().st_mtime < threshold:
+                try:
+                    p.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+        return removed
 
     def render_doctor_markdown(self, dossier: ClinicalDossier, ticket_id: str = "TICKET-PENDING") -> str:
         """
@@ -98,60 +116,58 @@ class DossierGeneratorService:
 - **Patient Identifier**: `{dossier.patient_name}` (`{dossier.patient_id}`)
 - **Timestamp**: `{dossier.created_at}`
 - **Triage Level**: {urgency_badge}
-- **Target Specialty**: **{a.recommended_specialty}** ({a.recommended_specialty_hindi})
+- **Recommended CHC Specialty**: **{a.recommended_specialty}** ({a.recommended_specialty_hindi})
+- **Engine**: {dossier.engine or 'ASI:One Reasoning + Safe Rule Fallback'}
 
 ---
 
-### [S] SUBJECTIVE (Patient Narrative & Vernacular Intake)
-- **Raw Vernacular Complaint (Hindi)**:
-  > *"{s.patient_chief_complaint_hindi}"*
-- **Clinical English Chief Complaint**:
-  **{s.chief_complaint_english}**
-- **Duration / Timeline**: `{s.symptom_duration}`
+## 1. SUBJECTIVE (S) - VERNACULAR PATIENT TRANSCRIPT & HISTORY
+- **Chief Complaint (Vernacular)**:
+  > *\"{s.patient_chief_complaint_hindi}\"*
+- **Chief Complaint (Standard English)**: **{s.chief_complaint_english}**
+- **Symptom Duration**: {s.symptom_duration}
 - **History of Present Illness (HPI)**:
   {s.history_of_present_illness}
-- **Associated Systemic Symptoms**:
+- **Associated Symptoms Reported**:
   {', '.join(s.associated_symptoms) if s.associated_symptoms else 'None reported'}
-- **Prior Medical History**:
-  {', '.join(s.past_medical_history) if s.past_medical_history else 'Non-contributory'}
+- **Patient-Reported Past Medical History**:
+  {', '.join(s.past_medical_history) if s.past_medical_history else 'None reported / denies chronic illness'}
 
 ---
 
-### [O] OBJECTIVE (VLM Visual Findings & Prescription OCR)
-- **Reported Vitals**:
-  {', '.join([f'{k}: {v}' for k, v in o.vitals_reported.items()]) if o.vitals_reported else 'Vital signs stable at intake screening'}
-- **Multimodal Visual / Photo Findings**:
+## 2. OBJECTIVE (O) - VITALS, EXAM & OCR OBSERVATIONS
+- **Patient Reported Vitals**:
+  {', '.join([f'{k}: {v}' for k, v in o.vitals_reported.items()]) if o.vitals_reported else 'Not reported / pending clinic desk vitals assessment'}
+- **Visual Inspection Findings (Lesion / Morphological Photos)**:
 {visual_rows}
-- **OCR Parsed Past Medications (Handwritten Prescription Slip)**:
-
-| Medication Name | Strength / Dose | Regimen / Frequency | Duration | OCR Confidence |
+- **Medication History (Extracted via OCR/Prescription Parsing)**:
+| Drug / Formulation | Dosage | Regimen | Duration | OCR Conf |
 | :--- | :--- | :--- | :--- | :--- |
 {med_rows}
-- **Objective Clinical Assessment Note**:
+- **Objective Clinical Signs Summary**:
   {o.clinical_signs_summary}
 
 ---
 
-### [A] ASSESSMENT (Differential Triage & Clinical Rationale)
-- **Ranked Differential Diagnoses**:
+## 3. ASSESSMENT (A) - CLINICAL REASONING & DIFFERENTIALS
+- **Clinical Impression & Rationale**:
+  {a.clinical_rationale}
+- **Differential Diagnoses (Ranked by Primary Care Probability)**:
 {diff_list}
 
-- **Clinical Rationale & Triage Decision**:
-  {a.clinical_rationale}
-
 ---
 
-### [P] PLAN (Targeted Investigations & OPD Action Plan)
-- **Suggested Point-of-Care Investigations (CHC Lab Checklist)**:
+## 4. PLAN (P) - SUGGESTED INVESTIGATIONS & INTERIM SAFETY
+- **Suggested CHC Diagnostic Investigations**:
 {inv_list}
-
-- **Red-Flag Tripwires Monitored**:
+- **Interim Vernacular Advice Issued to Patient**:
+  > *\"{p.interim_patient_advice_hindi}\"*
+- **Pre-Visit Patient Advice (English Translation)**:
+  {p.interim_patient_advice_english}
+- **Emergency Tripwires & Red-Flag Warnings**:
 {rf_list}
 
-- **Interim Patient Guidance Given in Hindi**:
-  > *"{p.interim_patient_advice_hindi}"*
-
 ---
-*Verified by CareRoute Agent Protocol | Anti-No-Show Escrow: 0.5 FET Verified*
+*Notice: This document provides automated pre-intake decision support and does not constitute a formal diagnosis. Final clinical diagnosis and treatment plans remain the sole responsibility of the attending CHC medical officer.*
 """
         return slip
