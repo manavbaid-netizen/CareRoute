@@ -13,8 +13,8 @@
 |---|---|---|---|
 | Step 0 | Setup, clean venv, baseline run | ✅ DONE | Baseline 5 tests pass, demo baseline verified |
 | Phase 1 | Repo hygiene, secret removal, .gitignore, config safety | ✅ DONE | Leaked seeds removed, seed generator created, .gitignore active |
-| Phase 2 | Real ACP in Dispatcher | ⏳ NEXT | Replace custom chat with real `uagents_core` ACP spec |
-| Phase 3 | Agentverse registration & discoverability | ⏳ PENDING | Mailbox mode, agentverse_readme.md, check_registration.py |
+| Phase 2 | Real ACP in Dispatcher | ✅ DONE | Real `chat_protocol_spec` included, ACKs + ChatMessage replies at every step, sessions keyed by sender address, SQLite session persistence |
+| Phase 3 | Agentverse registration & discoverability | ⏳ NEXT | Mailbox mode, agentverse_readme.md, check_registration.py |
 | Phase 4 | Doctor dossier persistence | ⏳ PENDING | Save before booking, Pydantic v2 model_dump_json/model_validate |
 | Phase 5 | ASI1 LLM core reasoning engine | ⏳ PENDING | Official ASI:One LLM API integration with fallback |
 | Phase 6 | Clinical safety, zero fabrication | ⏳ PENDING | Remove fake vitals/history/Rx from fallback, ask clarifications |
@@ -39,6 +39,15 @@
   - `pyproject.toml`: Ruff & pytest configurations added.
   - `Makefile`: `test`, `run`, `demo`, `lint`, `check`, `generate-seeds`, `clean`.
   - `PROGRESS.md`: Initialized.
-- **Tests Passing**: 5/5 passing in `test_careroute.py` under `pytest`.
-- **Open Items**: Proceeding to Phase 2 (Real ACP in dispatcher).
-- **Exact Next Step**: Phase 2 — Replace custom `ChatMessage`/`ChatResponse` with real `uagents_core.contrib.protocols.chat` Protocol (`chat_protocol_spec`), implement `ChatAcknowledgement`, process `StartSessionContent`, `TextContent`, `EndSessionContent`, map sender addresses as session keys, and dispatch replies back to `session["user_address"]`.
+## Phase 2 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2
+- **Files Changed**:
+  - `models/chat_models.py`: Removed custom `ChatMessage`/`ChatResponse`; re-exported official `uagents_core.contrib.protocols.chat` ACP types; added `create_text_chat` and `create_ack` helpers.
+  - `models/cards.py`: Added `card_to_markdown` renderer for accessible plain-text ACP fallback rendering.
+  - `services/session_store.py`: Created SQLite-backed `SessionStore` ensuring restart persistence and sessions keyed by sender address.
+  - `agents/dispatcher.py`: Attached `chat_proto` with `chat_protocol_spec` and `publish_manifest=True`; immediate `ChatAcknowledgement` for every message; processed `StartSessionContent`, `EndSessionContent`, `ResourceContent`, `TextContent`; updated all worker handlers to send user-facing `ChatMessage` to `session["user_address"]`; implemented watchdog timeout/retry on interval.
+  - `run_all.py`: Multi-process agent launcher avoiding port override collisions.
+  - `tests/test_phase2_acp.py`: 6 tests verifying digest equality with uagents-core, ACP helpers, ACK dispatch, symptom routing, and full worker-to-user dispatch.
+- **Tests Passing**: 11/11 tests passing across `test_careroute.py` and `tests/test_phase2_acp.py`.
+- **Open Items**: Proceeding to Phase 3 (Agentverse registration & discoverability).
+- **Exact Next Step**: Phase 3 — Verify mailbox parameter, wire `USE_AGENTVERSE`, print agent address and inspector URL, write `agentverse_readme.md` for ASI:One discovery, document topology, add `scripts/check_registration.py`.

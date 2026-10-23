@@ -39,3 +39,4 @@ ignore = [
 minversion = "7.0"
 testpaths = ["tests", "."]
 python_files = ["test_*.py"]
+pythonpath = ["."]

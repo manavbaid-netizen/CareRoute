@@ -3,6 +3,52 @@ from __future__ import annotations
 from typing import List, Dict, Any, Optional
 
 
+def card_to_markdown(card: Dict[str, Any]) -> str:
+    """
+    Render an ASI interactive card dictionary into clean, accessible Markdown
+    for text-based ACP clients or fallback display.
+    """
+    header = card.get("header", {})
+    title = header.get("title", "")
+    badge = header.get("badge", "")
+    sections = card.get("sections", [])
+    actions = card.get("actions", [])
+
+    lines = []
+    if title:
+        lines.append(f"### {title}")
+    if badge:
+        lines.append(f"**[{badge}]**\n")
+
+    for sec in sections:
+        sec_title = sec.get("title")
+        if sec_title:
+            lines.append(f"**{sec_title}**")
+        if "highlight" in sec:
+            lines.append(f"👉 **{sec['highlight']}**")
+        if "subtitle" in sec:
+            lines.append(f"_{sec['subtitle']}_")
+        if "content" in sec:
+            lines.append(sec["content"])
+        if "items" in sec:
+            for item in sec["items"]:
+                lines.append(f"• {item}")
+        if "facts" in sec:
+            for fact in sec["facts"]:
+                lines.append(f"• **{fact['label']}:** {fact['value']}")
+        if "qr_payload" in sec:
+            lines.append(f"\n🔐 **चेक-इन टोकन (Check-in Token):** `{sec['qr_payload']}`")
+        lines.append("")
+
+    if actions:
+        lines.append("**चयन करने के लिए विकल्प संख्या या टेक्स्ट भेजें:**")
+        for idx, act in enumerate(actions, 1):
+            label = act.get("label", "")
+            lines.append(f"[{idx}] {label}")
+
+    return "\n".join(lines).strip()
+
+
 def make_triage_detail_card(
     urgency: str,
     specialty_hi: str,
@@ -14,7 +60,7 @@ def make_triage_detail_card(
     Build an ASI Interactive Card presenting the patient triage result.
     Allows the user to view clinical assessment and proceed to OPD slot booking.
     """
-    is_urgent = "High" in urgency or "Critical" in urgency
+    is_urgent = "High" in urgency or "Critical" in urgency or "Emergency" in urgency
     theme_color = "#EF4444" if is_urgent else ("#F59E0B" if "Moderate" in urgency else "#10B981")
     badge_label = "प्राथमिकता (Priority)" if "Moderate" in urgency else ("अति आवश्यक (Urgent)" if is_urgent else "सामान्य (Routine)")
 
@@ -80,7 +126,7 @@ def make_slot_picker_card(
     Each slot is an interactive selection button.
     """
     slot_actions = []
-    for slot in available_slots:
+    for idx, slot in enumerate(available_slots, 1):
         slot_actions.append(
             {
                 "type": "button",
@@ -94,6 +140,7 @@ def make_slot_picker_card(
                     "doctor_name": doctor_name,
                     "clinic_name": clinic_name,
                     "room_no": room_no,
+                    "option_num": str(idx),
                 },
             }
         )
@@ -141,7 +188,6 @@ def make_booking_receipt_card(
     """
     payload_str = qr_data or f"CAREROUTE-CHECKIN:{ticket_id}:{clinic_name}:{room_no}"
 
-    # Visual representation of QR code block
     qr_ascii_preview = (
         "┌─────────────────┐\n"
         "│  ██ ███ ███ ██  │\n"
