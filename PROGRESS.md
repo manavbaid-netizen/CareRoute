@@ -14,8 +14,8 @@
 | Step 0 | Setup, clean venv, baseline run | ✅ DONE | Baseline 5 tests pass, demo baseline verified |
 | Phase 1 | Repo hygiene, secret removal, .gitignore, config safety | ✅ DONE | Leaked seeds removed, seed generator created, .gitignore active |
 | Phase 2 | Real ACP in Dispatcher | ✅ DONE | Real `chat_protocol_spec` included, ACKs + ChatMessage replies at every step, sessions keyed by sender address, SQLite session persistence |
-| Phase 3 | Agentverse registration & discoverability | ⏳ NEXT | Mailbox mode, agentverse_readme.md, check_registration.py |
-| Phase 4 | Doctor dossier persistence | ⏳ PENDING | Save before booking, Pydantic v2 model_dump_json/model_validate |
+| Phase 3 | Agentverse registration & discoverability | ✅ DONE | Mailbox mode parameters verified & wired, agentverse_readme.md, topology documented, check_registration.py |
+| Phase 4 | Doctor dossier persistence | ⏳ NEXT | Save before booking, Pydantic v2 model_dump_json/model_validate |
 | Phase 5 | ASI1 LLM core reasoning engine | ⏳ PENDING | Official ASI:One LLM API integration with fallback |
 | Phase 6 | Clinical safety, zero fabrication | ⏳ PENDING | Remove fake vitals/history/Rx from fallback, ask clarifications |
 | Phase 7 | Emergency detection & 108 SOS tripwires | ⏳ PENDING | Layered regex + Devanagari/Hinglish safety rules + 60+ test cases |
@@ -48,6 +48,13 @@
   - `agents/dispatcher.py`: Attached `chat_proto` with `chat_protocol_spec` and `publish_manifest=True`; immediate `ChatAcknowledgement` for every message; processed `StartSessionContent`, `EndSessionContent`, `ResourceContent`, `TextContent`; updated all worker handlers to send user-facing `ChatMessage` to `session["user_address"]`; implemented watchdog timeout/retry on interval.
   - `run_all.py`: Multi-process agent launcher avoiding port override collisions.
   - `tests/test_phase2_acp.py`: 6 tests verifying digest equality with uagents-core, ACP helpers, ACK dispatch, symptom routing, and full worker-to-user dispatch.
-- **Tests Passing**: 11/11 tests passing across `test_careroute.py` and `tests/test_phase2_acp.py`.
-- **Open Items**: Proceeding to Phase 3 (Agentverse registration & discoverability).
-- **Exact Next Step**: Phase 3 — Verify mailbox parameter, wire `USE_AGENTVERSE`, print agent address and inspector URL, write `agentverse_readme.md` for ASI:One discovery, document topology, add `scripts/check_registration.py`.
+## Phase 3 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3
+- **Files Changed**:
+  - `agents/dispatcher.py`: Wired `mailbox` and `agentverse` parameters dynamically; logged inspector and profile URLs; enabled UTF-8 support.
+  - `agentverse_readme.md`: Created complete profile description with Hindi, Hinglish, English sample queries, clinical disclaimer, and Innovation Lab badges for ASI:One discovery.
+  - `docs/topology.md`: Documented hybrid gateway pattern (public Dispatcher on Agentverse mailbox, internal workers on local IPC).
+  - `scripts/check_registration.py`: Created script to query Almanac, inspect agent addresses, check discovery status, and output submission URLs.
+- **Tests Passing**: 11/11 tests passing.
+- **Open Items**: Proceeding to Phase 4 (Doctor dossier persistence).
+- **Exact Next Step**: Phase 4 — Persist dossier (.json + .md) immediately after triage, pass real `dossier_id` into booking, replace `.json()` with `model_dump_json(indent=2)` and `parse_obj` with `model_validate_json`, add `DATA_RETENTION_DAYS` cleanup helper, assert dossier files exist from agent interactions.
