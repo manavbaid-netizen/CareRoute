@@ -72,27 +72,62 @@ async def handle_booking_commit(
         f"📝 Committing OPD booking for patient {msg.patient_name} (Slot: {msg.slot_id})"
     )
 
-    booking = roster_service.book_appointment(
-        slot_id=msg.slot_id,
-        patient_id=msg.patient_id,
-        patient_name=msg.patient_name,
-        dossier_id=msg.dossier_id,
-    )
-
-    # Persist and render Doctor's Clinical Dossier for the assigned ticket
+    # 1. Verify Doctor's Clinical Dossier exists before booking slot
     dossier = dossier_service.load_dossier(msg.dossier_id)
-    dossier_path = None
-    if dossier:
-        saved_paths = dossier_service.save_dossier(dossier, ticket_id=booking["ticket_id"])
-        dossier_path = saved_paths["md_path"]
-        roster_service.update_dossier_path(booking["ticket_id"], dossier_path)
-        ctx.logger.info(
-            f"📄 Doctor's Clinical Intake Dossier generated at: {dossier_path}"
-        )
-    else:
+    if not dossier:
         ctx.logger.error(
-            f"❌ Failed to locate clinical dossier '{msg.dossier_id}' for booking ticket {booking['ticket_id']}!"
+            f"❌ Failed to locate clinical dossier '{msg.dossier_id}' for booking request!"
         )
+        response = BookingCommitResponse(
+            session_id=msg.session_id,
+            ticket_id="",
+            patient_name=msg.patient_name,
+            doctor_name="",
+            clinic_name="",
+            room_no="",
+            slot_time="",
+            qr_payload="",
+            status="ERROR_MISSING_DOSSIER",
+            error_message=f"Clinical dossier '{msg.dossier_id}' not found. Cannot book appointment without clinical dossier.",
+        )
+        await ctx.send(sender, response)
+        return
+
+    # 2. Book appointment and decrement slot capacity atomically
+    try:
+        booking = roster_service.book_appointment(
+            slot_id=msg.slot_id,
+            patient_id=msg.patient_id,
+            patient_name=msg.patient_name,
+            dossier_id=msg.dossier_id,
+            slot_date=msg.slot_date,
+        )
+    except ValueError as exc:
+        err_msg = str(exc)
+        status = "SLOT_FULL" if "SLOT_FULL" in err_msg else "SLOT_NOT_FOUND"
+        ctx.logger.error(f"❌ Booking rejected for slot {msg.slot_id}: {err_msg}")
+        response = BookingCommitResponse(
+            session_id=msg.session_id,
+            ticket_id="",
+            patient_name=msg.patient_name,
+            doctor_name="",
+            clinic_name="",
+            room_no="",
+            slot_time="",
+            qr_payload="",
+            status=status,
+            error_message=err_msg,
+        )
+        await ctx.send(sender, response)
+        return
+
+    # 3. Persist and render Doctor's Clinical Dossier with assigned ticket id
+    saved_paths = dossier_service.save_dossier(dossier, ticket_id=booking["ticket_id"])
+    dossier_path = saved_paths["md_path"]
+    roster_service.update_dossier_path(booking["ticket_id"], dossier_path)
+    ctx.logger.info(
+        f"📄 Doctor's Clinical Intake Dossier generated at: {dossier_path}"
+    )
 
     response = BookingCommitResponse(
         session_id=msg.session_id,
@@ -103,7 +138,7 @@ async def handle_booking_commit(
         room_no=booking["room_no"],
         slot_time=booking["slot_time"],
         qr_payload=booking["qr_payload"],
-        status="CONFIRMED" if dossier else "ERROR_MISSING_DOSSIER",
+        status="CONFIRMED",
         dossier_path=dossier_path,
     )
     ctx.logger.info(f"🎉 Appointment successfully confirmed! Ticket: {booking['ticket_id']}")

@@ -116,6 +116,7 @@ class BookingCommitRequest(Model):
     patient_name: str
     slot_id: str
     dossier_id: str
+    slot_date: Optional[str] = None
     user_address: Optional[str] = None
 
 
@@ -134,6 +135,8 @@ class BookingCommitResponse(Model):
     qr_payload: str
     status: str = "CONFIRMED"
     dossier_path: Optional[str] = None
+    slot_date: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class EscrowLockRequest(Model):

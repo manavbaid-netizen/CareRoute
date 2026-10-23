@@ -34,7 +34,10 @@ from agents.escrow_worker import (
 
 @pytest.fixture
 def roster():
-    return ClinicRosterService()
+    service = ClinicRosterService()
+    service.reset_slot("ALW_GEN_0930")
+    service.reset_slot("ALW_CHEST_1000")
+    return service
 
 
 def test_payment_protocol_spec_included():

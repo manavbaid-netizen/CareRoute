@@ -22,6 +22,7 @@ class TestCareRouteClinicalSystem(unittest.TestCase):
         Config.ensure_directories()
         self.vlm = VLMService()
         self.roster = ClinicRosterService()
+        self.roster.reset_slot("ALW_CHEST_1000")
         self.dossier_gen = DossierGeneratorService()
 
     def test_emergency_tripwire_detection(self):

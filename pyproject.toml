@@ -37,6 +37,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["tests", "."]
+testpaths = ["tests", "test_careroute.py"]
+norecursedirs = [".venv", "venv", "__pycache__", "build", "dist", "data"]
 python_files = ["test_*.py"]
 pythonpath = ["."]

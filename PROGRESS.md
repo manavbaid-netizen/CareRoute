@@ -20,8 +20,8 @@
 | Phase 6 | Clinical safety, zero fabrication | ✅ DONE | Zero fabricated vitals/PMH/Rx, NTEP TB criteria (cough > 2w + B-symptoms), General Medicine default for unclassified, disclaimers, clarifying questions |
 | Phase 5 | ASI1 LLM core reasoning engine | ✅ DONE | OpenAI-compatible ASI:One client with multi-tier fallback (ASI1 -> Gemini -> OpenAI -> Deterministic), error correction retry, honest vision handling, provenance |
 | Phase 8 | Real Payment Protocol & secure escrow | ✅ DONE | Official `payment_protocol_spec` with `seller` role, `CommitPayment` handler, SQLite `escrow` table (single source of truth), clinic desk auth, double-refund prevention, honest simulation labelling |
-| Phase 9 | Booking logic & capacity | ⏳ NEXT | Atomic capacity decrement, slot dates, json roster, foreign keys |
-| Phase 10 | ASI1 Interactive Cards | ⏳ PENDING | Interactive Card schemas with robust text fallback |
+| Phase 9 | Booking logic & capacity | ✅ DONE | Atomic capacity decrement, per-date slots, Specialty enum, honest slot errors, foreign keys, deterministic patient identity |
+| Phase 10 | ASI1 Interactive Cards | ⏳ NEXT | Interactive Card schemas with robust text fallback |
 | Phase 11 | Orchestration & Tools | ⏳ PENDING | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator |
 | Phase 12 | Tests, CI, Docs & README | ⏳ PENDING | GitHub CI, updated README with badges, Devpost demo script |
 
@@ -90,6 +90,30 @@
   - `services/clinic_roster.py`: Created SQLite `escrow` table schema; implemented atomic `create_escrow_deposit()`, `lock_escrow_deposit()`, `release_escrow_refund()`, `get_escrow()`, and `cancel_escrow()`.
   - `config.py`: Added default authorized clinic desk addresses in `CLINIC_DESK_ADDRESSES`.
   - `tests/test_phase8_escrow.py`: Added 8 tests covering official payment protocol inclusion, `RequestPayment` construction, `CommitPayment` verification and deposit locking, insufficient deposit cancellation, unauthorized patient check-in rejection, authorized clinic refund, double-refund prevention, invalid token rejection, and slot cancellation.
-- **Tests Passing**: 45/45 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 9 (Booking Logic & Capacity).
-- **Exact Next Step**: Phase 9 — Implement atomic capacity decrement in SQLite (`UPDATE slots SET capacity = capacity - 1 WHERE slot_id = ? AND capacity > 0`), enforce per-date slots (`slot_date`), stop silent fallback to Pulmonology slot 0 for invalid slot_ids (raise explicit error), map specialty from controlled Enum, load clinic doctors and slots from `data/clinic_roster.json`.
+- **Tests Passing**: 45/45 tests passing at Phase 8.
+## Phase 9 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6, Phase 5, Phase 8, Phase 9
+- **Files Changed**:
+  - `services/clinic_roster.py`:
+    - Loaded roster configuration dynamically from `data/clinic_roster.json` with fallback.
+    - Defined explicit `Specialty` enum (`PULMONOLOGY`, `DERMATOLOGY`, `GENERAL_MEDICINE`, `EMERGENCY`) and mapping function `map_specialty()`.
+    - Added per-date slots schema in SQLite (`slots` table) with `capacity` and `booked_count`.
+    - Implemented atomic capacity decrement: `UPDATE slots SET booked_count = booked_count + 1 WHERE slot_id = ? AND slot_date = ? AND booked_count < capacity`.
+    - Replaced silent fallback to pulmonology slot 0 with explicit `ValueError` raises (`SLOT_NOT_FOUND` and `SLOT_FULL`).
+    - Enforced SQLite foreign keys (`PRAGMA foreign_keys = ON;`) linking `appointments`, `slots`, and `escrow` tables.
+    - Added `reset_slot(slot_id, slot_date)` helper for deterministic tests and administration.
+  - `services/session_store.py`:
+    - Derived patient ID deterministically from user address (`PAT_{user_address[:10]}`) instead of session UUID.
+    - Defaulted patient name to `"मरीज (Patient)"` rather than hardcoding to `"रामकुमार"`.
+  - `agents/dispatcher.py`:
+    - Added `extract_patient_name()` from conversational intro.
+    - Handled `SLOT_FULL` and `SLOT_NOT_FOUND` with polite Hindi notices and prompt to select another slot.
+  - `agents/logistics_worker.py`:
+    - Validated clinical dossier existence *prior* to booking slot to prevent slot capacity leak on invalid bookings.
+    - Caught `ValueError` from `book_appointment`, setting response status to `SLOT_FULL` or `SLOT_NOT_FOUND`.
+  - `tests/test_phase9_booking.py`: Added 7 tests covering JSON roster loading, specialty enum mapping, atomic capacity limit, per-date slot isolation, unknown slot rejection, patient identity derivation, and SQLite foreign key constraints.
+  - `tests/test_phase4_dossier.py`, `tests/test_phase8_escrow.py`, `test_careroute.py`: Reset test slot capacities in test fixtures.
+  - `pyproject.toml`: Configured `norecursedirs` to ignore `.venv`, preventing pytest recursive scan delays.
+- **Tests Passing**: 52/52 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 10 (ASI1 Interactive Cards).
+- **Exact Next Step**: Phase 10 — Review ASI:One Interactive Cards (`models/cards.py`), add Pydantic schemas or validation for interactive card payloads, implement robust plain-text markdown fallbacks (`card_to_markdown()`), support interactive actions/buttons with fallbacks, write `tests/test_phase10_cards.py`.

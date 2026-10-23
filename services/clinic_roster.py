@@ -1,26 +1,148 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import datetime
 import uuid
-from typing import List, Dict, Any, Optional
+import logging
+from enum import Enum
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Tuple
+
 from config import Config
+
+logger = logging.getLogger("CareRoute.ClinicRoster")
+
+
+class Specialty(str, Enum):
+    """Controlled medical specialties supported across CHC telemedicine network."""
+    PULMONOLOGY = "Pulmonology / Chest & Respiratory Medicine"
+    DERMATOLOGY = "Dermatology & Venereology"
+    GENERAL_MEDICINE = "General Medicine & Primary Health"
+    PEDIATRICS = "Pediatrics & Child Health"
+    ORTHOPEDICS = "Orthopedics & Joint Care"
+    OBGYN = "Obstetrics & Gynecology"
+
+
+def map_specialty(target_specialty: str) -> Tuple[Specialty, str]:
+    """
+    Map arbitrary clinical specialty string to controlled Specialty Enum and roster key.
+    Defaults to General Medicine if unclassified.
+    """
+    low = (target_specialty or "").lower()
+    if any(k in low for k in ("pulmon", "chest", "respirat", "tb", "फेफड़ा", "छाती")):
+        return Specialty.PULMONOLOGY, "pulmonology"
+    elif any(k in low for k in ("derm", "skin", "fungal", "त्वचा", "चर्म")):
+        return Specialty.DERMATOLOGY, "dermatology"
+    elif any(k in low for k in ("pediatric", "child", "बच्चा", "शिशु")):
+        return Specialty.PEDIATRICS, "pediatrics"
+    elif any(k in low for k in ("ortho", "bone", "joint", "हड्डी", "घुटने", "कमर")):
+        return Specialty.ORTHOPEDICS, "orthopedics"
+    elif any(k in low for k in ("gyn", "obstetric", "pregnancy", "महिला", "गर्भावस्था")):
+        return Specialty.OBGYN, "obgyn"
+    else:
+        return Specialty.GENERAL_MEDICINE, "general"
 
 
 class ClinicRosterService:
     """
-    Manages rural Community Health Center (CHC) doctors, available OPD slots,
-    and appointment registrations with SQLite persistence.
+    Manages rural Community Health Center (CHC) doctors, per-date appointment slots,
+    and atomic booking capacity with SQLite persistence and foreign keys.
     """
 
     def __init__(self, db_path: Optional[str] = None) -> None:
         self.db_path = str(db_path or Config.DB_PATH)
+        self.roster_data = self._load_roster_json()
         self._init_db()
 
+    def _load_roster_json(self) -> Dict[str, Any]:
+        """Load doctor roster and slot configurations from data/clinic_roster.json."""
+        paths_to_try = [
+            Path("data/clinic_roster.json"),
+            Config.DATA_DIR / "clinic_roster.json",
+            Path("data/seed/clinic_roster.json"),
+        ]
+        for path in paths_to_try:
+            if path.exists():
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        return data
+                except Exception as e:
+                    logger.warning(f"Could not load roster from {path}: {e}")
+
+        # Inline fallback if json file missing
+        return {
+            "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+            "specialties": {
+                "pulmonology": {
+                    "doctor_name": "Dr. Harish Sharma (एमडी, चेस्ट एवं जनरल फिजिशियन)",
+                    "specialty": "Pulmonology / Chest & Respiratory Medicine",
+                    "specialty_hi": "छाती एवं फेफड़ा रोग विशेषज्ञ",
+                    "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+                    "room_no": "कक्ष संख्या 4 (Room 4)",
+                    "slots": [
+                        {"slot_id": "ALW_CHEST_1000", "time": "10:00 AM - 10:30 AM", "capacity": 5},
+                        {"slot_id": "ALW_CHEST_1130", "time": "11:30 AM - 12:00 PM", "capacity": 3},
+                        {"slot_id": "ALW_CHEST_1230", "time": "12:30 PM - 01:00 PM", "capacity": 4},
+                    ],
+                },
+                "dermatology": {
+                    "doctor_name": "Dr. Sunita Verma (एमडी, त्वचा एवं चर्म रोग)",
+                    "specialty": "Dermatology & Venereology",
+                    "specialty_hi": "त्वचा एवं चर्म रोग विशेषज्ञ",
+                    "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+                    "room_no": "कक्ष संख्या 7 (Room 7)",
+                    "slots": [
+                        {"slot_id": "ALW_DERM_1030", "time": "10:30 AM - 11:00 AM", "capacity": 4},
+                        {"slot_id": "ALW_DERM_1145", "time": "11:45 AM - 12:15 PM", "capacity": 2},
+                        {"slot_id": "ALW_DERM_1245", "time": "12:45 PM - 01:15 PM", "capacity": 5},
+                    ],
+                },
+                "general": {
+                    "doctor_name": "Dr. Rajesh Meena (एमबीबीएस, वरिष्ठ चिकित्सा अधिकारी)",
+                    "specialty": "General Medicine & Primary Health",
+                    "specialty_hi": "सामान्य रोग विशेषज्ञ (General Physician)",
+                    "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+                    "room_no": "कक्ष संख्या 2 (Room 2)",
+                    "slots": [
+                        {"slot_id": "ALW_GEN_0930", "time": "09:30 AM - 10:00 AM", "capacity": 6},
+                        {"slot_id": "ALW_GEN_1100", "time": "11:00 AM - 11:30 AM", "capacity": 5},
+                    ],
+                },
+            },
+        }
+
+    @property
+    def DOCTORS(self) -> Dict[str, Any]:
+        """Backward compatibility accessor for legacy code."""
+        return self.roster_data.get("specialties", {})
+
     def _init_db(self) -> None:
-        """Create bookings and escrow tables if not existing."""
+        """Create tables with foreign keys and schema migration."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+
+            # 1. Per-date slots table with capacity & booked_count
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS slots (
+                    slot_id TEXT NOT NULL,
+                    slot_date TEXT NOT NULL,
+                    slot_time TEXT NOT NULL,
+                    specialty_key TEXT NOT NULL,
+                    doctor_name TEXT NOT NULL,
+                    room_no TEXT NOT NULL,
+                    clinic_name TEXT NOT NULL,
+                    capacity INTEGER NOT NULL,
+                    booked_count INTEGER DEFAULT 0,
+                    PRIMARY KEY (slot_id, slot_date)
+                )
+                """
+            )
+
+            # 2. Appointments table
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS appointments (
@@ -33,15 +155,18 @@ class ClinicRosterService:
                     room_no TEXT NOT NULL,
                     slot_id TEXT NOT NULL,
                     slot_time TEXT NOT NULL,
+                    slot_date TEXT NOT NULL,
                     dossier_id TEXT NOT NULL,
                     dossier_path TEXT DEFAULT '',
                     escrow_status TEXT NOT NULL,
                     booking_status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    qr_hash TEXT DEFAULT ''
                 )
                 """
             )
-            # Create unified escrow table
+
+            # 3. Escrow table
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS escrow (
@@ -54,11 +179,13 @@ class ClinicRosterService:
                     qr_token TEXT,
                     created_at TEXT NOT NULL,
                     locked_at TEXT,
-                    refunded_at TEXT
+                    refunded_at TEXT,
+                    FOREIGN KEY (ticket_id) REFERENCES appointments(ticket_id) ON DELETE CASCADE
                 )
                 """
             )
-            # Automatic schema migration for existing SQLite databases
+
+            # Migrations for existing appointments tables
             cursor.execute("PRAGMA table_info(appointments)")
             existing_cols = {col[1] for col in cursor.fetchall()}
             if "dossier_path" not in existing_cols:
@@ -67,67 +194,126 @@ class ClinicRosterService:
                 cursor.execute("ALTER TABLE appointments ADD COLUMN slot_date TEXT DEFAULT ''")
             if "qr_hash" not in existing_cols:
                 cursor.execute("ALTER TABLE appointments ADD COLUMN qr_hash TEXT DEFAULT ''")
+
             conn.commit()
 
-    # Pre-configured Community Health Center Doctors (Alwar District CHC)
-    DOCTORS = {
-        "pulmonology": {
-            "doctor_name": "Dr. Harish Sharma (एमडी, चेस्ट एवं जनरल फिजिशियन)",
-            "specialty": "Pulmonology / Chest & Respiratory Medicine",
-            "specialty_hi": "छाती एवं फेफड़ा रोग विशेषज्ञ",
-            "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
-            "room_no": "कक्ष संख्या 4 (Room 4)",
-            "slots": [
-                {"slot_id": "ALW_CHEST_1000", "time": "10:00 AM - 10:30 AM", "capacity": 5},
-                {"slot_id": "ALW_CHEST_1130", "time": "11:30 AM - 12:00 PM", "capacity": 3},
-                {"slot_id": "ALW_CHEST_1230", "time": "12:30 PM - 01:00 PM", "capacity": 4},
-            ],
-        },
-        "dermatology": {
-            "doctor_name": "Dr. Sunita Verma (एमडी, त्वचा एवं चर्म रोग)",
-            "specialty": "Dermatology & Venereology",
-            "specialty_hi": "त्वचा एवं चर्म रोग विशेषज्ञ",
-            "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
-            "room_no": "कक्ष संख्या 7 (Room 7)",
-            "slots": [
-                {"slot_id": "ALW_DERM_1030", "time": "10:30 AM - 11:00 AM", "capacity": 4},
-                {"slot_id": "ALW_DERM_1145", "time": "11:45 AM - 12:15 PM", "capacity": 2},
-                {"slot_id": "ALW_DERM_1245", "time": "12:45 PM - 01:15 PM", "capacity": 5},
-            ],
-        },
-        "general": {
-            "doctor_name": "Dr. Rajesh Meena (एमबीबीएस, वरिष्ठ चिकित्सा अधिकारी)",
-            "specialty": "General Medicine & Primary Health",
-            "specialty_hi": "सामान्य रोग विशेषज्ञ (General Physician)",
-            "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
-            "room_no": "कक्ष संख्या 2 (Room 2)",
-            "slots": [
-                {"slot_id": "ALW_GEN_0930", "time": "09:30 AM - 10:00 AM", "capacity": 6},
-                {"slot_id": "ALW_GEN_1100", "time": "11:00 AM - 11:30 AM", "capacity": 5},
-            ],
-        },
-    }
+    def _ensure_slots_for_date(self, slot_date: str) -> None:
+        """Seed per-date slots into SQLite slots table if not yet present."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM slots WHERE slot_date = ?", (slot_date,))
+            count = cursor.fetchone()[0]
+            if count > 0:
+                return
+
+            clinic_name = self.roster_data.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
+            specialties = self.roster_data.get("specialties", {})
+            for spec_key, doc in specialties.items():
+                for s in doc.get("slots", []):
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO slots (
+                            slot_id, slot_date, slot_time, specialty_key,
+                            doctor_name, room_no, clinic_name, capacity, booked_count
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        """,
+                        (
+                            s["slot_id"],
+                            slot_date,
+                            s["time"],
+                            spec_key,
+                            doc["doctor_name"],
+                            doc["room_no"],
+                            clinic_name,
+                            int(s.get("capacity", 5)),
+                        ),
+                    )
+            conn.commit()
+
+    def reset_slot(self, slot_id: str, slot_date: Optional[str] = None) -> None:
+        """Reset booked_count to 0 for a given slot (for testing and administrative reset)."""
+        target_date = slot_date or (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        self._ensure_slots_for_date(target_date)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE slots SET booked_count = 0 WHERE slot_id = ? AND slot_date = ?",
+                (slot_id, target_date),
+            )
+            today_str = datetime.date.today().isoformat()
+            cursor.execute(
+                "UPDATE slots SET booked_count = 0 WHERE slot_id = ? AND slot_date = ?",
+                (slot_id, today_str),
+            )
+            conn.commit()
 
     def match_doctor_for_specialty(self, target_specialty: str) -> Dict[str, Any]:
-        """Match the recommended specialty to an available CHC doctor."""
-        low = target_specialty.lower()
-        if "pulmon" in low or "chest" in low or "respirat" in low or "tb" in low:
-            return self.DOCTORS["pulmonology"]
-        elif "derm" in low or "skin" in low or "fungal" in low:
-            return self.DOCTORS["dermatology"]
-        else:
-            return self.DOCTORS["general"]
+        """Match the recommended specialty to an available CHC doctor profile."""
+        _, spec_key = map_specialty(target_specialty)
+        specialties = self.roster_data.get("specialties", {})
+        if spec_key in specialties:
+            return specialties[spec_key]
+        return specialties.get("general", {})
 
-    def get_available_slots(self, specialty: str) -> Dict[str, Any]:
-        """Fetch available slots for the given clinical specialty."""
-        doc_profile = self.match_doctor_for_specialty(specialty)
-        return {
-            "clinic_name": doc_profile["clinic_name"],
-            "doctor_name": doc_profile["doctor_name"],
-            "specialty": doc_profile["specialty"],
-            "room_no": doc_profile["room_no"],
-            "slots": doc_profile["slots"],
-        }
+    def get_available_slots(self, specialty: str, slot_date: Optional[str] = None) -> Dict[str, Any]:
+        """Fetch available slots for the given clinical specialty on a specific date (default tomorrow)."""
+        spec_enum, spec_key = map_specialty(specialty)
+        if not slot_date:
+            slot_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        self._ensure_slots_for_date(slot_date)
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM slots
+                WHERE slot_date = ? AND specialty_key = ?
+                ORDER BY slot_id ASC
+                """,
+                (slot_date, spec_key),
+            )
+            rows = cursor.fetchall()
+            note = None
+            if not rows:
+                # If specialty not directly available at CHC, route to General Medicine with transparent note
+                spec_enum, spec_key = Specialty.GENERAL_MEDICINE, "general"
+                cursor.execute(
+                    """
+                    SELECT * FROM slots
+                    WHERE slot_date = ? AND specialty_key = ?
+                    ORDER BY slot_id ASC
+                    """,
+                    (slot_date, spec_key),
+                )
+                rows = cursor.fetchall()
+                note = f"Specialty '{specialty}' not directly staffed today; routed to General Medicine OPD."
+
+            doc_name = rows[0]["doctor_name"] if rows else "Dr. Rajesh Meena"
+            clinic_name = rows[0]["clinic_name"] if rows else "Alwar CHC"
+            room_no = rows[0]["room_no"] if rows else "Room 2"
+
+            slots = []
+            for r in rows:
+                rem = max(0, r["capacity"] - r["booked_count"])
+                slots.append({
+                    "slot_id": r["slot_id"],
+                    "time": r["slot_time"],
+                    "slot_date": slot_date,
+                    "capacity": r["capacity"],
+                    "booked_count": r["booked_count"],
+                    "remaining_capacity": rem,
+                })
+
+            return {
+                "clinic_name": clinic_name,
+                "doctor_name": doc_name,
+                "specialty": spec_enum.value,
+                "room_no": room_no,
+                "slots": slots,
+                "slot_date": slot_date,
+                "routing_note": note,
+            }
 
     def book_appointment(
         self,
@@ -135,51 +321,74 @@ class ClinicRosterService:
         patient_id: str,
         patient_name: str,
         dossier_id: str,
+        slot_date: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Record a confirmed appointment booking in the SQLite registry.
+        Record a confirmed appointment booking in SQLite with atomic capacity check.
+        Raises ValueError with:
+          - 'SLOT_NOT_FOUND' if slot_id is invalid
+          - 'SLOT_FULL' if slot capacity is reached
         """
-        # Find slot details
-        selected_slot = None
-        matched_doc = None
-        for key, doc in self.DOCTORS.items():
-            for s in doc["slots"]:
-                if s["slot_id"] == slot_id:
-                    selected_slot = s
-                    matched_doc = doc
-                    break
-            if selected_slot:
-                break
-
-        # Fallback if slot ID not found
-        if not selected_slot:
-            matched_doc = self.DOCTORS["pulmonology"]
-            selected_slot = matched_doc["slots"][0]
-
-        ticket_id = f"CR-ALW-{uuid.uuid4().hex[:6].upper()}"
-        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        qr_payload = f"CAREROUTE:{ticket_id}:{matched_doc['clinic_name']}:{matched_doc['room_no']}"
+        if not slot_date:
+            slot_date = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        self._ensure_slots_for_date(slot_date)
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = ON;")
+
+            # 1. Verify slot exists
+            cursor.execute(
+                "SELECT * FROM slots WHERE slot_id = ? AND slot_date = ?",
+                (slot_id, slot_date),
+            )
+            slot_row = cursor.fetchone()
+            if not slot_row:
+                raise ValueError(f"SLOT_NOT_FOUND: Slot '{slot_id}' not found for date '{slot_date}'.")
+
+            # 2. Atomic capacity decrement
+            cursor.execute(
+                """
+                UPDATE slots
+                SET booked_count = booked_count + 1
+                WHERE slot_id = ? AND slot_date = ? AND booked_count < capacity
+                """,
+                (slot_id, slot_date),
+            )
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    "SELECT capacity, booked_count FROM slots WHERE slot_id = ? AND slot_date = ?",
+                    (slot_id, slot_date),
+                )
+                cap, booked = cursor.fetchone()
+                raise ValueError(
+                    f"SLOT_FULL: Slot '{slot_id}' is full for date '{slot_date}' (capacity: {cap}, booked: {booked})."
+                )
+
+            # 3. Create appointment and escrow records in transaction
+            ticket_id = f"CR-ALW-{uuid.uuid4().hex[:6].upper()}"
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            qr_payload = f"CAREROUTE:{ticket_id}:{slot_row[6]}:{slot_row[5]}"  # clinic_name, room_no
+
             cursor.execute(
                 """
                 INSERT INTO appointments (
                     ticket_id, patient_id, patient_name, clinic_name,
                     doctor_name, specialty, room_no, slot_id, slot_time,
-                    dossier_id, escrow_status, booking_status, created_at, qr_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    slot_date, dossier_id, escrow_status, booking_status, created_at, qr_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     ticket_id,
                     patient_id,
                     patient_name,
-                    matched_doc["clinic_name"],
-                    matched_doc["doctor_name"],
-                    matched_doc["specialty"],
-                    matched_doc["room_no"],
-                    selected_slot["slot_id"],
-                    selected_slot["time"],
+                    slot_row[6],
+                    slot_row[4],
+                    slot_row[3],
+                    slot_row[5],
+                    slot_id,
+                    slot_row[2],
+                    slot_date,
                     dossier_id,
                     "LOCKED",
                     "CONFIRMED",
@@ -187,10 +396,10 @@ class ClinicRosterService:
                     qr_payload,
                 ),
             )
-            # Create corresponding escrow record
+
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO escrow (
+                INSERT INTO escrow (
                     ticket_id, patient_address, amount_fet, lock_tx,
                     refund_tx, status, qr_token, created_at, locked_at, refunded_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -210,18 +419,19 @@ class ClinicRosterService:
             )
             conn.commit()
 
-        return {
-            "ticket_id": ticket_id,
-            "patient_id": patient_id,
-            "patient_name": patient_name,
-            "doctor_name": matched_doc["doctor_name"],
-            "clinic_name": matched_doc["clinic_name"],
-            "room_no": matched_doc["room_no"],
-            "slot_time": selected_slot["time"],
-            "dossier_id": dossier_id,
-            "qr_payload": qr_payload,
-            "status": "CONFIRMED",
-        }
+            return {
+                "ticket_id": ticket_id,
+                "patient_id": patient_id,
+                "patient_name": patient_name,
+                "doctor_name": slot_row[4],
+                "clinic_name": slot_row[6],
+                "room_no": slot_row[5],
+                "slot_time": slot_row[2],
+                "slot_date": slot_date,
+                "dossier_id": dossier_id,
+                "qr_payload": qr_payload,
+                "status": "CONFIRMED",
+            }
 
     def update_dossier_path(self, ticket_id: str, dossier_path: str) -> None:
         """Record the persisted dossier file path for a confirmed booking."""
@@ -369,5 +579,4 @@ class ClinicRosterService:
                 (ticket_id,),
             )
             conn.commit()
-            return cursor.rowcount > 0
             return cursor.rowcount > 0

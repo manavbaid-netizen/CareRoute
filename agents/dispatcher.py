@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import re
 import time
 import datetime
 from typing import Dict, Any, Optional
@@ -175,6 +176,18 @@ async def handle_acp_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowl
 async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any], user_text: str) -> None:
     """Process incoming text narrative, button action JSON, or fallback selection."""
     ctx.logger.info(f"💬 User text from {sender}: '{user_text}' [State: {session['state']}]")
+
+    # Extract patient name if explicitly volunteered
+    name_match = re.search(
+        r"(?:मेरा\s*नाम|my\s*name\s*is|patient\s*name\s*is|नाम\s*[:=])\s*([a-zA-Z\u0900-\u097f]+(?:\s+[a-zA-Z\u0900-\u097f]+)?)",
+        user_text,
+        re.IGNORECASE,
+    )
+    if name_match:
+        extracted = name_match.group(1).strip()
+        session["patient_name"] = extracted
+        session_store.save_session(sender, session)
+        ctx.logger.info(f"👤 Patient name identified: {extracted}")
 
     # 1. Parse JSON button action if present
     action_data: Optional[Dict[str, Any]] = None
@@ -410,6 +423,20 @@ async def handle_booking_commit_response(ctx: Context, sender: str, msg: Booking
     """
     user_addr = msg.session_id
     session = session_store.get_or_create_session(user_addr)
+
+    # Handle slot capacity or not found errors
+    if msg.status in ("SLOT_FULL", "SLOT_NOT_FOUND"):
+        session["pending_request"] = None
+        session["state"] = "STATE_SLOT_SELECTED"
+        session_store.save_session(user_addr, session)
+        err_text = (
+            "⚠️ **स्लॉट अनुपलब्ध**: क्षमा करें, यह समय स्लॉट भर चुका है या उपलब्ध नहीं है। "
+            "कृपया डॉक्टर के अन्य उपलब्ध समय स्लॉट में से चयन करें।"
+        )
+        await ctx.send(user_addr, create_text_chat(err_text))
+        ctx.logger.warning(f"❌ Booking failed for user {user_addr}: {msg.error_message or msg.status}")
+        return
+
     session["booking_details"] = msg.model_dump()
     session["ticket_id"] = msg.ticket_id
 

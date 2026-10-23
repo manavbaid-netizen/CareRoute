@@ -140,6 +140,9 @@ async def test_agent_driven_dossier_flow():
     assert raw_md_path.exists(), f"Raw MD missing: {raw_md_path}"
 
     # Step 2: Drive booking through Logistics Worker using REAL dossier_id
+    from agents.logistics_worker import roster_service
+    roster_service.reset_slot("ALW_CHEST_1000")
+
     logi_ctx = MagicMock()
     logi_ctx.send = AsyncMock()
     logi_ctx.logger = MagicMock()

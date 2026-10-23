@@ -111,6 +111,7 @@ class Config(metaclass=ConfigMeta):
 
     # Data Storage Paths
     DATA_STORAGE_DIR: Path = BASE_DIR / os.getenv("DATA_STORAGE_DIR", "data")
+    DATA_DIR: Path = DATA_STORAGE_DIR
     DOSSIERS_DIR: Path = DATA_STORAGE_DIR / "dossiers"
     BOOKINGS_DIR: Path = DATA_STORAGE_DIR / "bookings"
     DB_PATH: Path = DATA_STORAGE_DIR / "careroute.db"
