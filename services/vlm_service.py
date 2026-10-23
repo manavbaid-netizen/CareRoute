@@ -1,24 +1,22 @@
 from __future__ import annotations
 
-import re
-import uuid
 import datetime
 import logging
-from typing import Tuple, List, Dict, Any, Optional
+import re
+import uuid
 
 from config import Config
-from services.safety import SafetyService
-from services.llm_client import LLMClient, HONEST_VISION_NOTE_HI
 from models.clinical_schemas import (
-    ClinicalDossier,
-    SubjectiveSOAP,
-    ObjectiveSOAP,
     AssessmentSOAP,
-    PlanSOAP,
-    MedicationEntry,
+    ClinicalDossier,
+    ObjectiveSOAP,
     PhysicalFinding,
+    PlanSOAP,
+    SubjectiveSOAP,
     TriageUrgency,
 )
+from services.llm_client import LLMClient
+from services.safety import SafetyService
 
 logger = logging.getLogger("CareRoute.VLMService")
 
@@ -65,7 +63,7 @@ class VLMService:
         self.use_mock = Config.USE_MOCK_VLM or (not Config.ASI1_API_KEY and not Config.GEMINI_API_KEY and not Config.OPENAI_API_KEY)
         self.llm_client = LLMClient(fallback_engine=self)
 
-    def scan_safety_tripwires(self, text: str) -> Tuple[bool, List[str]]:
+    def scan_safety_tripwires(self, text: str) -> tuple[bool, list[str]]:
         """
         Scan input text for acute life-threatening emergencies using layered SafetyService.
         Returns (is_emergency, list_of_specific_reasons).
@@ -79,9 +77,9 @@ class VLMService:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """
         Execute clinical triage and return:
         (ClinicalDossier, hindi_patient_summary, is_emergency, emergency_reasons)
@@ -118,7 +116,7 @@ class VLMService:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        emergency_reasons: List[str],
+        emergency_reasons: list[str],
     ) -> ClinicalDossier:
         """Construct a high-priority emergency dossier for critical triage cases."""
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -176,8 +174,8 @@ class VLMService:
         cls,
         text: str,
         patient_name: str = "",
-        patient_age: Optional[int] = None,
-    ) -> List[Dict[str, str]]:
+        patient_age: int | None = None,
+    ) -> list[dict[str, str]]:
         """
         Identify missing critical intake fields and return up to 3 polite clarifying questions in Hindi.
         Fields checked:
@@ -185,7 +183,7 @@ class VLMService:
           2. Patient demographics
           3. Pre-existing conditions or chronic history
         """
-        questions: List[Dict[str, str]] = []
+        questions: list[dict[str, str]] = []
         lower = text.lower()
 
         # Check duration
@@ -225,9 +223,9 @@ class VLMService:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """
         Domain-specific clinical intelligence engine adhering strictly to zero-fabrication rules:
         - Vitals are empty unless stated by the patient
@@ -352,7 +350,7 @@ class VLMService:
 
         elif is_derm:
             # Never fabricate image findings when vision model is inactive
-            findings: List[PhysicalFinding] = []
+            findings: list[PhysicalFinding] = []
 
             dossier = ClinicalDossier(
                 dossier_id=dossier_id,
@@ -504,9 +502,9 @@ class VLMService:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """
         Execute live multimodal model call using Google GenAI or OpenAI.
         Falls back automatically if structured schema parsing encounters any anomaly.

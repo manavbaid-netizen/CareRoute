@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import json
 import re
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from typing import Any
 
+from pydantic import BaseModel, Field
 from uagents_core.contrib.protocols.chat import (
     ChatMessage,
-    TextContent,
     MetadataContent,
+    TextContent,
 )
-from config import Config
 
+from config import Config
 
 # ------------------------------------------------------------------------------
 # Pydantic v2 Models for ASI:One Interactive Cards
@@ -23,14 +23,14 @@ class CardAction(BaseModel):
     action_id: str
     label: str
     style: str = "primary"  # "primary", "secondary", "danger", "disabled"
-    payload: Dict[str, Any] = Field(default_factory=dict)
-    url: Optional[str] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    url: str | None = None
 
 
 class CardHeader(BaseModel):
     """Title and badge banner for an interactive card."""
     title: str
-    badge: Optional[str] = None
+    badge: str | None = None
 
 
 class CardFact(BaseModel):
@@ -41,21 +41,21 @@ class CardFact(BaseModel):
 
 class CardSection(BaseModel):
     """Content section within an interactive card."""
-    title: Optional[str] = None
-    highlight: Optional[str] = None
-    subtitle: Optional[str] = None
-    content: Optional[str] = None
-    items: Optional[List[str]] = None
-    facts: Optional[List[Dict[str, str]]] = None
-    qr_payload: Optional[str] = None
-    qr_visual: Optional[str] = None
+    title: str | None = None
+    highlight: str | None = None
+    subtitle: str | None = None
+    content: str | None = None
+    items: list[str] | None = None
+    facts: list[dict[str, str]] | None = None
+    qr_payload: str | None = None
+    qr_visual: str | None = None
 
 
 class CardTheme(BaseModel):
     """Visual branding theme for ASI:One card drawer."""
     primary_color: str = "#2563EB"
-    badge_bg: Optional[str] = None
-    badge_text: Optional[str] = None
+    badge_bg: str | None = None
+    badge_text: str | None = None
 
 
 class InteractiveCard(BaseModel):
@@ -64,15 +64,15 @@ class InteractiveCard(BaseModel):
     version: str = "1.0"
     theme: CardTheme = Field(default_factory=CardTheme)
     header: CardHeader
-    sections: List[CardSection] = Field(default_factory=list)
-    actions: List[CardAction] = Field(default_factory=list)
+    sections: list[CardSection] = Field(default_factory=list)
+    actions: list[CardAction] = Field(default_factory=list)
 
 
 # ------------------------------------------------------------------------------
 # Plain-Text & Accessible Markdown Fallback Renderer
 # ------------------------------------------------------------------------------
 
-def card_to_markdown(card: Dict[str, Any]) -> str:
+def card_to_markdown(card: dict[str, Any]) -> str:
     """
     Render an ASI interactive card dictionary into clean, accessible Markdown
     for text-based ACP clients or fallback display when cards are disabled.
@@ -124,7 +124,7 @@ def card_to_markdown(card: Dict[str, Any]) -> str:
 # Action Parsing & Fallback Extraction
 # ------------------------------------------------------------------------------
 
-def parse_card_action(user_text: str) -> Optional[Dict[str, Any]]:
+def parse_card_action(user_text: str) -> dict[str, Any] | None:
     """
     Parse an incoming client message to determine if it is an interactive
     card action payload (JSON from a button tap) or a numeric text selection.
@@ -156,13 +156,13 @@ def parse_card_action(user_text: str) -> Optional[Dict[str, Any]]:
 
 def create_card_chat(
     text: str,
-    card: Dict[str, Any],
-    use_interactive: Optional[bool] = None,
+    card: dict[str, Any],
+    use_interactive: bool | None = None,
     end_session: bool = False,
 ) -> ChatMessage:
     """
     Construct an official ACP ChatMessage delivering an interactive card.
-    
+
     If use_interactive is True (defaulting to Config.USE_INTERACTIVE_CARDS):
       - Emits TextContent containing the readable text & Markdown fallback.
       - Emits MetadataContent containing the structured card payload so
@@ -212,8 +212,8 @@ def make_triage_detail_card(
     specialty_hi: str,
     specialty_en: str,
     pre_visit_advice: str,
-    differentials: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    differentials: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Build an ASI Interactive Card presenting the patient triage result.
     Allows the user to view clinical assessment and proceed to OPD slot booking.
@@ -281,8 +281,8 @@ def make_slot_picker_card(
     doctor_name: str,
     specialty: str,
     room_no: str,
-    available_slots: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+    available_slots: list[dict[str, Any]],
+) -> dict[str, Any]:
     """
     Build an ASI Interactive Card displaying CHC doctor appointment slots.
     Each slot button is formatted with concise, mobile-friendly touch labels.
@@ -352,7 +352,7 @@ def make_booking_receipt_card(
     slot_time: str,
     deposit_fet: float = 0.5,
     qr_data: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build an ASI Interactive Card confirming the patient's OPD appointment,
     providing the clinic check-in QR payload and anti-no-show escrow receipt.
@@ -432,7 +432,7 @@ def make_booking_receipt_card(
     return card_dict
 
 
-def make_emergency_sos_card(reasons: Optional[List[str]] = None) -> Dict[str, Any]:
+def make_emergency_sos_card(reasons: list[str] | None = None) -> dict[str, Any]:
     """
     Build an ASI Interactive Card triggered immediately upon life-threatening red flags.
     Halts regular intake and prioritizes 108 emergency service dispatch.

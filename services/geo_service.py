@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import time
-import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 import requests
+
 from config import Config
 
 logger = logging.getLogger("CareRoute.GeoService")
@@ -16,7 +17,7 @@ logger = logging.getLogger("CareRoute.GeoService")
 # Curated Verified Directory of Community Health Centers (Rajasthan / Alwar District)
 # Reliable offline fallback conforming to official MoHFW / NHM Rajasthan registry.
 # ==============================================================================
-VERIFIED_CHC_DIRECTORY: List[Dict[str, Any]] = [
+VERIFIED_CHC_DIRECTORY: list[dict[str, Any]] = [
     {
         "id": "chc_alwar_main",
         "name": "सामुदायिक स्वास्थ्य केंद्र एवं सामान्य चिकित्सालय, अलवर (Alwar CHC & District Hospital)",
@@ -133,7 +134,7 @@ class GeoService:
 
     def __init__(
         self,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         cache_ttl_hours: int = 24,
         request_timeout: float = 3.5,
     ) -> None:
@@ -143,17 +144,17 @@ class GeoService:
         self.cache_ttl_seconds = cache_ttl_hours * 3600
         self.request_timeout = request_timeout
 
-    def _load_cache(self) -> Dict[str, Any]:
+    def _load_cache(self) -> dict[str, Any]:
         """Load persistent cache of previous Overpass API queries."""
         if self.cache_file.exists():
             try:
-                with open(self.cache_file, "r", encoding="utf-8") as f:
+                with open(self.cache_file, encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
                 logger.warning(f"Failed to read geo cache: {e}")
         return {}
 
-    def _save_cache(self, cache_data: Dict[str, Any]) -> None:
+    def _save_cache(self, cache_data: dict[str, Any]) -> None:
         """Save query result to local disk cache."""
         try:
             with open(self.cache_file, "w", encoding="utf-8") as f:
@@ -166,7 +167,7 @@ class GeoService:
         lat: float,
         lon: float,
         radius_km: float = 30.0,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> list[dict[str, Any]] | None:
         """
         Execute live Overpass API query for hospitals, clinics, and health centres.
         Returns None if request fails or times out.
@@ -232,7 +233,7 @@ class GeoService:
         longitude: float = 76.6346,
         radius_km: float = 35.0,
         max_results: int = 3,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Locate the nearest verified Community Health Centers (CHCs) to the patient.
         Layered resolution:
@@ -272,7 +273,7 @@ class GeoService:
         fallback_results.sort(key=lambda x: x["distance_km"])
         return fallback_results[:max_results]
 
-    def format_chc_recommendation_hindi(self, facility: Dict[str, Any]) -> str:
+    def format_chc_recommendation_hindi(self, facility: dict[str, Any]) -> str:
         """Render a patient-friendly Hindi notification card for the nearest CHC."""
         name = facility.get("name", "सामुदायिक स्वास्थ्य केंद्र (CHC)")
         dist = facility.get("distance_km", 0.0)

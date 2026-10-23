@@ -10,9 +10,11 @@ Verifies:
 7. SQLite foreign key enforcement (PRAGMA foreign_keys = ON).
 """
 
-import pytest
 import sqlite3
 from datetime import date, timedelta
+
+import pytest
+
 from services.clinic_roster import (
     ClinicRosterService,
     Specialty,

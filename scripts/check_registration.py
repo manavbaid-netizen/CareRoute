@@ -25,9 +25,9 @@ import requests
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from uagents.crypto import Identity
 
 from config import Config
-from uagents.crypto import Identity
 
 console = Console()
 

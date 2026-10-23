@@ -11,25 +11,26 @@ Verifies:
 8. Explicit simulation labelling ([SIMULATED - PAYMENT_MODE=simulation]).
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from uagents_core.contrib.protocols.payment import (
-    payment_protocol_spec,
-    RequestPayment,
+    CancelPayment,
     CommitPayment,
     CompletePayment,
-    CancelPayment,
     Funds,
+    RequestPayment,
+    payment_protocol_spec,
 )
-from config import Config
-from services.clinic_roster import ClinicRosterService
+
 from agents.escrow_worker import (
-    escrow_worker,
-    payment_proto,
     create_payment_request,
     execute_patient_checkin,
     handle_commit_payment,
+    payment_proto,
 )
+from config import Config
+from services.clinic_roster import ClinicRosterService
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Any
 
 # Verified Government of India National Helplines
 HELPLINE_AMBULANCE = "108"
@@ -269,7 +269,7 @@ class SafetyService:
     """
 
     @classmethod
-    def scan_for_emergencies(cls, text: str) -> Tuple[bool, List[str], List[Dict[str, Any]]]:
+    def scan_for_emergencies(cls, text: str) -> tuple[bool, list[str], list[dict[str, Any]]]:
         """
         Scan input text for life-threatening emergencies.
         Returns:
@@ -279,8 +279,8 @@ class SafetyService:
             return False, [], []
 
         norm = normalize_text(text)
-        reasons: List[str] = []
-        hits: List[Dict[str, Any]] = []
+        reasons: list[str] = []
+        hits: list[dict[str, Any]] = []
 
         for defn in EMERGENCY_DEFINITIONS:
             category = defn["category"]
@@ -311,8 +311,8 @@ class SafetyService:
     @classmethod
     def build_emergency_directive_response(
         cls,
-        reasons: List[str],
-        hits: Optional[List[Dict[str, Any]]] = None,
+        reasons: list[str],
+        hits: list[dict[str, Any]] | None = None,
     ) -> str:
         """
         Generate empathetic, high-urgency emergency directives.

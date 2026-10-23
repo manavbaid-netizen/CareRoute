@@ -1,27 +1,28 @@
 from __future__ import annotations
 
+import datetime
 import logging
 import uuid
-import datetime
-from typing import Dict, Any, Optional, Tuple
+
 from uagents import Agent, Context, Protocol
 from uagents_core.contrib.protocols.payment import (
-    payment_protocol_spec,
-    RequestPayment,
+    CancelPayment,
     CommitPayment,
     CompletePayment,
-    CancelPayment,
-    RejectPayment,
     Funds,
+    RejectPayment,
+    RequestPayment,
+    payment_protocol_spec,
 )
+
 from config import Config
-from services.clinic_roster import ClinicRosterService
 from models.chat_models import (
     EscrowLockRequest,
     EscrowLockResponse,
     EscrowReleaseRequest,
     EscrowReleaseResponse,
 )
+from services.clinic_roster import ClinicRosterService
 
 logger = logging.getLogger("CareRoute.EscrowWorker")
 
@@ -63,10 +64,10 @@ def create_payment_request(
     )
 
 
-def verify_testnet_tx(tx_hash: str, expected_recipient: str, expected_amount: float) -> Tuple[bool, str]:
+def verify_testnet_tx(tx_hash: str, expected_recipient: str, expected_amount: float) -> tuple[bool, str]:
     """Verify transaction on Fetch.ai Dorado Testnet RPC."""
-    import urllib.request
     import json
+    import urllib.request
     clean_tx = tx_hash.replace("0x", "").upper()
     url = f"{Config.FETCH_TESTNET_RPC}/tx?hash=0x{clean_tx}"
     try:
@@ -221,7 +222,7 @@ async def handle_escrow_release(
     await ctx.send(sender, response)
 
 
-def is_authorized_desk(scanner: str, sender_address: Optional[str] = None) -> bool:
+def is_authorized_desk(scanner: str, sender_address: str | None = None) -> bool:
     """Verify that check-in request originated from an authorized clinic desk."""
     auth_list = [addr.lower() for addr in Config.CLINIC_DESK_ADDRESSES]
     scanner_clean = (scanner or "").strip().lower()
@@ -243,8 +244,8 @@ def is_authorized_desk(scanner: str, sender_address: Optional[str] = None) -> bo
 def execute_patient_checkin(
     ticket_id: str,
     scanned_by: str = "alwar_chc_reception_desk",
-    qr_token: Optional[str] = None,
-    sender_address: Optional[str] = None,
+    qr_token: str | None = None,
+    sender_address: str | None = None,
 ) -> EscrowReleaseResponse:
     """
     Process physical clinic QR check-in, unlocking escrow and releasing 0.5 FET refund.

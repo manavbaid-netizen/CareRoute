@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+
 from uagents import Agent, Context
+
 from config import Config
-from services.vlm_service import VLMService
-from services.dossier_generator import DossierGeneratorService
 from models.chat_models import TriageAnalysisRequest, TriageAnalysisResponse
+from services.dossier_generator import DossierGeneratorService
+from services.vlm_service import VLMService
 
 logger = logging.getLogger("CareRoute.DiagnosticWorker")
 

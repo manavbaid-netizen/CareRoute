@@ -11,16 +11,16 @@ Starts all 4 Fetch.ai agents as independent processes without port overriding:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
-import signal
-import subprocess
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
+from uagents.crypto import Identity
 
 from config import Config
-from uagents.crypto import Identity
 
 console = Console()
 ROOT_DIR = Path(__file__).resolve().parent
@@ -94,7 +94,7 @@ def main() -> None:
     except KeyboardInterrupt:
         console.print("\n[bold yellow]Stopping CareRoute agents...[/bold yellow]")
     finally:
-        for name, p in processes:
+        for _name, p in processes:
             if p.poll() is None:
                 p.terminate()
                 try:

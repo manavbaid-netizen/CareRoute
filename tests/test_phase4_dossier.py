@@ -6,27 +6,28 @@ and file creation driven through agent message handlers.
 
 import os
 import time
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-from config import Config
-from services.dossier_generator import DossierGeneratorService
-from services.clinic_roster import ClinicRosterService
-from models.clinical_schemas import (
-    ClinicalDossier,
-    SubjectiveSOAP,
-    ObjectiveSOAP,
-    AssessmentSOAP,
-    PlanSOAP,
-    TriageUrgency,
-)
-from models.chat_models import (
-    TriageAnalysisRequest,
-    BookingCommitRequest,
-)
+import pytest
+
 from agents.diagnostic_worker import handle_triage_request
 from agents.logistics_worker import handle_booking_commit
+from config import Config
+from models.chat_models import (
+    BookingCommitRequest,
+    TriageAnalysisRequest,
+)
+from models.clinical_schemas import (
+    AssessmentSOAP,
+    ClinicalDossier,
+    ObjectiveSOAP,
+    PlanSOAP,
+    SubjectiveSOAP,
+    TriageUrgency,
+)
+from services.clinic_roster import ClinicRosterService
+from services.dossier_generator import DossierGeneratorService
 
 
 @pytest.fixture

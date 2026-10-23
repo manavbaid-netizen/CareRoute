@@ -4,44 +4,41 @@ Verifies protocol digests, schema compatibility with uagents-core, and
 proper request/response/acknowledgement routing in the dispatcher.
 """
 
-import pytest
 import datetime
-from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
+import pytest
 import uagents_core.contrib.protocols.chat as official_chat
-from models.chat_models import (
-    ChatMessage,
-    ChatAcknowledgement,
-    TextContent,
-    StartSessionContent,
-    EndSessionContent,
-    create_text_chat,
-    create_ack,
-    chat_protocol_spec,
-    TriageAnalysisResponse,
-    SlotQueryResponse,
-    BookingCommitResponse,
-    EscrowLockResponse,
-)
-from models.clinical_schemas import (
-    ClinicalDossier,
-    SubjectiveSOAP,
-    ObjectiveSOAP,
-    AssessmentSOAP,
-    PlanSOAP,
-    TriageUrgency,
-)
+
 from agents.dispatcher import (
-    dispatcher,
+    WORKER_ADDRESSES,
     chat_proto,
     handle_acp_chat_message,
-    handle_triage_response,
-    handle_slot_response,
-    handle_booking_commit_response,
     handle_escrow_lock_response,
+    handle_slot_response,
+    handle_triage_response,
     session_store,
-    WORKER_ADDRESSES,
+)
+from models.chat_models import (
+    ChatAcknowledgement,
+    ChatMessage,
+    EndSessionContent,
+    EscrowLockResponse,
+    SlotQueryResponse,
+    StartSessionContent,
+    TextContent,
+    TriageAnalysisResponse,
+    create_ack,
+    create_text_chat,
+)
+from models.clinical_schemas import (
+    AssessmentSOAP,
+    ClinicalDossier,
+    ObjectiveSOAP,
+    PlanSOAP,
+    SubjectiveSOAP,
+    TriageUrgency,
 )
 
 

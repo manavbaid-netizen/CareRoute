@@ -1,31 +1,57 @@
 from __future__ import annotations
 
 import datetime
-from typing import List, Dict, Any, Optional
-from uuid import uuid4, UUID
-from uagents import Model, Field
-from models.clinical_schemas import ClinicalDossier
+from typing import Any
+from uuid import UUID, uuid4
+
+from uagents import Field, Model
 
 # ==============================================================================
 # REAL AGENT CHAT PROTOCOL (ACP) - Re-exported from uagents_core
 # ==============================================================================
 from uagents_core.contrib.protocols.chat import (
-    ChatMessage,
     ChatAcknowledgement,
-    TextContent,
-    StartSessionContent,
+    ChatMessage,
     EndSessionContent,
-    ResourceContent,
-    Resource,
     MetadataContent,
+    Resource,
+    ResourceContent,
+    StartSessionContent,
+    TextContent,
     chat_protocol_spec,
 )
+
+from models.clinical_schemas import ClinicalDossier
+
+__all__ = [
+    "ChatMessage",
+    "ChatAcknowledgement",
+    "TextContent",
+    "StartSessionContent",
+    "EndSessionContent",
+    "ResourceContent",
+    "Resource",
+    "MetadataContent",
+    "chat_protocol_spec",
+    "create_text_chat",
+    "create_ack",
+    "TriageAnalysisRequest",
+    "TriageAnalysisResponse",
+    "SlotQueryRequest",
+    "SlotQueryResponse",
+    "BookingCommitRequest",
+    "BookingCommitResponse",
+    "EscrowLockRequest",
+    "EscrowLockResponse",
+    "EscrowReleaseRequest",
+    "EscrowReleaseResponse",
+]
 
 
 def create_text_chat(
     text: str,
     end_session: bool = False,
-    msg_id: Optional[UUID] = None,
+    msg_id: UUID | None = None,
 ) -> ChatMessage:
     """
     Construct a valid, real Agent Chat Protocol (ACP) ChatMessage envelope
@@ -64,9 +90,9 @@ class TriageAnalysisRequest(Model):
     patient_id: str
     patient_name: str = "Patient"
     text_transcript: str
-    image_data: Optional[str] = None  # Base64 string or filename/mock token
-    image_type: Optional[str] = None  # "lesion_photo" | "prescription_slip"
-    user_address: Optional[str] = None
+    image_data: str | None = None  # Base64 string or filename/mock token
+    image_type: str | None = None  # "lesion_photo" | "prescription_slip"
+    user_address: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -80,7 +106,7 @@ class TriageAnalysisResponse(Model):
     dossier: ClinicalDossier
     hindi_summary: str
     is_emergency: bool = False
-    emergency_reasons: List[str] = Field(default_factory=list)
+    emergency_reasons: list[str] = Field(default_factory=list)
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -91,8 +117,8 @@ class SlotQueryRequest(Model):
     """
     session_id: str
     specialty: str
-    clinic_id: Optional[str] = None
-    user_address: Optional[str] = None
+    clinic_id: str | None = None
+    user_address: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -106,7 +132,7 @@ class SlotQueryResponse(Model):
     doctor_name: str
     specialty: str
     room_no: str
-    slots: List[Dict[str, Any]]
+    slots: list[dict[str, Any]]
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -120,8 +146,8 @@ class BookingCommitRequest(Model):
     patient_name: str
     slot_id: str
     dossier_id: str
-    slot_date: Optional[str] = None
-    user_address: Optional[str] = None
+    slot_date: str | None = None
+    user_address: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -139,9 +165,9 @@ class BookingCommitResponse(Model):
     slot_time: str
     qr_payload: str
     status: str = "CONFIRMED"
-    dossier_path: Optional[str] = None
-    slot_date: Optional[str] = None
-    error_message: Optional[str] = None
+    dossier_path: str | None = None
+    slot_date: str | None = None
+    error_message: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -154,7 +180,7 @@ class EscrowLockRequest(Model):
     patient_id: str
     ticket_id: str
     amount_fet: float = 0.5
-    user_address: Optional[str] = None
+    user_address: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
@@ -178,8 +204,8 @@ class EscrowReleaseRequest(Model):
     """
     ticket_id: str
     scanned_by: str
-    qr_token: Optional[str] = None
-    sender_address: Optional[str] = None
+    qr_token: str | None = None
+    sender_address: str | None = None
     correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 

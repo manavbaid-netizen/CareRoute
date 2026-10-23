@@ -5,7 +5,6 @@ Use these to populate your local .env file. NEVER commit real seeds to git.
 """
 
 import secrets
-import string
 
 # Wordlist subset for human-readable yet cryptographically strong 12-word seeds
 WORDS = [

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import sqlite3
-import json
 import datetime
-from typing import Dict, Any, Optional
+import json
+import sqlite3
+from typing import Any
+
 from config import Config
 
 
@@ -14,9 +15,9 @@ class SessionStore:
     survives agent restarts.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         self.db_path = str(db_path or Config.DB_PATH)
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: dict[str, dict[str, Any]] = {}
         self._init_db()
 
     def _init_db(self) -> None:
@@ -42,7 +43,7 @@ class SessionStore:
             )
             conn.commit()
 
-    def get_or_create_session(self, user_address: str) -> Dict[str, Any]:
+    def get_or_create_session(self, user_address: str) -> dict[str, Any]:
         """Fetch active session for user address, or initialize a new one."""
         if user_address in self._cache:
             return self._cache[user_address]
@@ -76,9 +77,7 @@ class SessionStore:
 
         # New session initialization
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        # Derive short patient ID from address
-        clean_addr = user_address.replace("agent", "").replace("1", "")[:6].upper() or "USER"
-        new_session: Dict[str, Any] = {
+        new_session: dict[str, Any] = {
             "user_address": user_address,
             "session_id": user_address,
             "state": "STATE_INTAKE",
@@ -97,7 +96,7 @@ class SessionStore:
         self.save_session(user_address, new_session)
         return new_session
 
-    def save_session(self, user_address: str, session: Dict[str, Any]) -> None:
+    def save_session(self, user_address: str, session: dict[str, Any]) -> None:
         """Persist session state to SQLite."""
         self._cache[user_address] = session
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()

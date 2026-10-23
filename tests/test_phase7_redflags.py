@@ -6,16 +6,15 @@ robust negation handling, and category-specific reason generation.
 
 import json
 from pathlib import Path
-import pytest
 
-from services.safety import SafetyService, EMERGENCY_DEFINITIONS
+from services.safety import SafetyService
 from services.vlm_service import VLMService
 
 TEST_CASES_PATH = Path(__file__).resolve().parent.parent / "data" / "redflag_test_cases.json"
 
 
 def load_test_cases():
-    with open(TEST_CASES_PATH, "r", encoding="utf-8") as f:
+    with open(TEST_CASES_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

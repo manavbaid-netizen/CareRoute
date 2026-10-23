@@ -12,9 +12,9 @@ Verifies:
 """
 
 import pytest
-from services.vlm_service import VLMService, CLINICAL_DISCLAIMER_HI, CLINICAL_DISCLAIMER_EN
-from models.clinical_schemas import TriageUrgency
 
+from models.clinical_schemas import TriageUrgency
+from services.vlm_service import CLINICAL_DISCLAIMER_EN, CLINICAL_DISCLAIMER_HI, VLMService
 
 UNRELATED_SYMPTOM_TEST_CASES = [
     {

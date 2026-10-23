@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -94,7 +94,7 @@ class Config(metaclass=ConfigMeta):
 
     # Clinic Authentication & Anti-Fraud Security
     DEFAULT_CLINIC_ID: str = os.getenv("DEFAULT_CLINIC_ID", "chc_alwar_01")
-    CLINIC_DESK_ADDRESSES: List[str] = [
+    CLINIC_DESK_ADDRESSES: list[str] = [
         addr.strip()
         for addr in os.getenv(
             "CLINIC_DESK_ADDRESSES",

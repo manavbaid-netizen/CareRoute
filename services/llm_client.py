@@ -1,24 +1,23 @@
 from __future__ import annotations
 
-import re
-import json
-import uuid
 import datetime
+import json
 import logging
-from typing import Tuple, List, Dict, Any, Optional
+import re
+import uuid
+from typing import Any
 
 from config import Config
-from services.safety import SafetyService
 from models.clinical_schemas import (
-    ClinicalDossier,
-    SubjectiveSOAP,
-    ObjectiveSOAP,
     AssessmentSOAP,
-    PlanSOAP,
-    PhysicalFinding,
+    ClinicalDossier,
     MedicationEntry,
+    ObjectiveSOAP,
+    PlanSOAP,
+    SubjectiveSOAP,
     TriageUrgency,
 )
+from services.safety import SafetyService
 
 logger = logging.getLogger("CareRoute.LLMClient")
 
@@ -118,7 +117,7 @@ class LLMClient:
       4. Deterministic Clinical Intelligence Fallback (Zero fabrication, NTEP compliance)
     """
 
-    def __init__(self, fallback_engine: Optional[Any] = None) -> None:
+    def __init__(self, fallback_engine: Any | None = None) -> None:
         self.asi1_client = None
         self.gemini_client = None
         self.openai_client = None
@@ -163,9 +162,9 @@ class LLMClient:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """
         Execute clinical reasoning through available LLM providers with automatic fallback.
         Returns: (ClinicalDossier, hindi_summary, is_emergency, emergency_reasons)
@@ -256,9 +255,9 @@ class LLMClient:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Optional[Tuple[ClinicalDossier, str, bool, List[str]]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]] | None:
         """Call an OpenAI-compatible endpoint with JSON parsing and 1 retry on validation failure."""
         user_message = f"Patient Input: {text_transcript}\nPatient Name: {patient_name}\nSession ID: {session_id}"
         has_vision = bool(image_data)
@@ -300,7 +299,7 @@ class LLMClient:
             return dossier, hindi_summary, False, []
         return None
 
-    def _invoke_openai_chat(self, client: Any, model: str, messages: List[Dict[str, str]]) -> str:
+    def _invoke_openai_chat(self, client: Any, model: str, messages: list[dict[str, str]]) -> str:
         """Execute chat completion call on OpenAI client."""
         completion = client.chat.completions.create(
             model=model,
@@ -316,9 +315,9 @@ class LLMClient:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Optional[Tuple[ClinicalDossier, str, bool, List[str]]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]] | None:
         """Call Google Gemini with structured prompt and validation."""
         user_prompt = f"{SYSTEM_PROMPT}\n\nPatient Input: {text_transcript}\nPatient Name: {patient_name}"
         has_vision = bool(image_data)
@@ -344,7 +343,7 @@ class LLMClient:
         patient_name: str,
         text_transcript: str,
         has_vision: bool,
-    ) -> Tuple[Optional[ClinicalDossier], str]:
+    ) -> tuple[ClinicalDossier | None, str]:
         """Parse, validate, and construct ClinicalDossier with zero-fabrication guarantees."""
         if not raw_text:
             return None, ""
@@ -475,9 +474,9 @@ class LLMClient:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: Optional[str] = None,
-        image_type: Optional[str] = None,
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        image_data: str | None = None,
+        image_type: str | None = None,
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """Delegate directly to deterministic clinical fallback engine."""
         if self.fallback_engine and hasattr(self.fallback_engine, "_mock_clinical_analysis"):
             dossier, summary, is_em, reasons = self.fallback_engine._mock_clinical_analysis(
@@ -543,8 +542,8 @@ class LLMClient:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        emergency_reasons: List[str],
-    ) -> Tuple[ClinicalDossier, str, bool, List[str]]:
+        emergency_reasons: list[str],
+    ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """Construct immediate emergency dossier bypassing external LLM latency."""
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         dossier = ClinicalDossier(

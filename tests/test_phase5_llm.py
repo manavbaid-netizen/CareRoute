@@ -12,13 +12,18 @@ Verifies:
 
 import json
 from unittest.mock import MagicMock, patch
+
 import pytest
 from openai import APITimeoutError, AuthenticationError
 
-from services.llm_client import LLMClient, CLINICAL_DISCLAIMER_EN, CLINICAL_DISCLAIMER_HI, HONEST_VISION_NOTE_HI
 from models.clinical_schemas import ClinicalDossier, TriageUrgency
+from services.llm_client import (
+    CLINICAL_DISCLAIMER_EN,
+    CLINICAL_DISCLAIMER_HI,
+    HONEST_VISION_NOTE_HI,
+    LLMClient,
+)
 from services.vlm_service import VLMService
-
 
 SAMPLE_VALID_LLM_JSON = json.dumps({
     "subjective": {

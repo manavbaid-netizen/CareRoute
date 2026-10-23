@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import sqlite3
 import logging
-from typing import Dict, Any, List
-from pathlib import Path
+import sqlite3
+from typing import Any
 
 from config import Config
 from services.clinic_roster import ClinicRosterService
@@ -12,7 +11,7 @@ from services.geo_service import GeoService
 logger = logging.getLogger("CareRoute.HealthCheck")
 
 
-def check_database() -> Dict[str, Any]:
+def check_database() -> dict[str, Any]:
     """Verify SQLite database connectivity and schema tables."""
     try:
         with sqlite3.connect(Config.DB_PATH) as conn:
@@ -28,7 +27,7 @@ def check_database() -> Dict[str, Any]:
         return {"status": "UNHEALTHY", "error": str(exc)}
 
 
-def check_roster() -> Dict[str, Any]:
+def check_roster() -> dict[str, Any]:
     """Verify clinic roster data loading."""
     try:
         service = ClinicRosterService()
@@ -44,7 +43,7 @@ def check_roster() -> Dict[str, Any]:
         return {"status": "UNHEALTHY", "error": str(exc)}
 
 
-def check_storage() -> Dict[str, Any]:
+def check_storage() -> dict[str, Any]:
     """Verify disk storage directory permissions."""
     try:
         Config.ensure_directories()
@@ -56,7 +55,7 @@ def check_storage() -> Dict[str, Any]:
         return {"status": "UNHEALTHY", "error": str(exc)}
 
 
-def check_geo_service() -> Dict[str, Any]:
+def check_geo_service() -> dict[str, Any]:
     """Verify GeoService returns verified CHCs (live or offline fallback)."""
     try:
         geo = GeoService()
@@ -68,7 +67,7 @@ def check_geo_service() -> Dict[str, Any]:
         return {"status": "UNHEALTHY", "error": str(exc)}
 
 
-def check_system_health() -> Dict[str, Any]:
+def check_system_health() -> dict[str, Any]:
     """
     Comprehensive startup and operational health check for CareRoute.
     Returns status: HEALTHY, DEGRADED, or UNHEALTHY.

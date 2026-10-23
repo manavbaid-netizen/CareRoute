@@ -1,20 +1,18 @@
 """Automated unit and integration test suite for CareRoute multi-agent codebase."""
-import os
 import unittest
-from pathlib import Path
 
+from agents.escrow_worker import execute_patient_checkin
 from config import Config
-from models.clinical_schemas import TriageUrgency, ClinicalDossier
 from models.cards import (
-    make_triage_detail_card,
-    make_slot_picker_card,
     make_booking_receipt_card,
     make_emergency_sos_card,
+    make_slot_picker_card,
+    make_triage_detail_card,
 )
-from services.vlm_service import VLMService
+from models.clinical_schemas import TriageUrgency
 from services.clinic_roster import ClinicRosterService
 from services.dossier_generator import DossierGeneratorService
-from agents.escrow_worker import execute_patient_checkin
+from services.vlm_service import VLMService
 
 
 class TestCareRouteClinicalSystem(unittest.TestCase):

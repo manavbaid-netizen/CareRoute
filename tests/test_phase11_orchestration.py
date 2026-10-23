@@ -6,30 +6,26 @@ and OpenStreetMap / Overpass GeoService with offline fallback.
 """
 
 import time
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from config import Config
-from services.geo_service import GeoService, haversine_distance_km, VERIFIED_CHC_DIRECTORY
-from services.health_check import check_system_health, check_database, check_roster
-from models.chat_models import (
-    TriageAnalysisRequest,
-    TriageAnalysisResponse,
-    SlotQueryRequest,
-    SlotQueryResponse,
-    BookingCommitRequest,
-    BookingCommitResponse,
-    EscrowLockRequest,
-    EscrowLockResponse,
-)
+import pytest
+
 from agents.dispatcher import (
+    _SENDER_MESSAGE_TIMESTAMPS,
+    MAX_INPUT_LENGTH,
+    WORKER_ADDRESSES,
     _process_user_text,
     request_timeout_watchdog,
     session_store,
-    MAX_INPUT_LENGTH,
-    _SENDER_MESSAGE_TIMESTAMPS,
-    WORKER_ADDRESSES,
 )
+from config import Config
+from models.chat_models import (
+    BookingCommitRequest,
+    SlotQueryRequest,
+    TriageAnalysisRequest,
+)
+from services.geo_service import GeoService, haversine_distance_km
+from services.health_check import check_system_health
 
 
 def test_correlation_id_presence():

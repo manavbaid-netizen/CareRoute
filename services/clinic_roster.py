@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import json
-import sqlite3
 import datetime
-import uuid
+import json
 import logging
+import sqlite3
+import uuid
 from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from config import Config
 
@@ -24,7 +24,7 @@ class Specialty(str, Enum):
     OBGYN = "Obstetrics & Gynecology"
 
 
-def map_specialty(target_specialty: str) -> Tuple[Specialty, str]:
+def map_specialty(target_specialty: str) -> tuple[Specialty, str]:
     """
     Map arbitrary clinical specialty string to controlled Specialty Enum and roster key.
     Defaults to General Medicine if unclassified.
@@ -50,12 +50,12 @@ class ClinicRosterService:
     and atomic booking capacity with SQLite persistence and foreign keys.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         self.db_path = str(db_path or Config.DB_PATH)
         self.roster_data = self._load_roster_json()
         self._init_db()
 
-    def _load_roster_json(self) -> Dict[str, Any]:
+    def _load_roster_json(self) -> dict[str, Any]:
         """Load doctor roster and slot configurations from data/clinic_roster.json."""
         paths_to_try = [
             Path("data/clinic_roster.json"),
@@ -65,7 +65,7 @@ class ClinicRosterService:
         for path in paths_to_try:
             if path.exists():
                 try:
-                    with open(path, "r", encoding="utf-8") as f:
+                    with open(path, encoding="utf-8") as f:
                         data = json.load(f)
                         return data
                 except Exception as e:
@@ -114,7 +114,7 @@ class ClinicRosterService:
         }
 
     @property
-    def DOCTORS(self) -> Dict[str, Any]:
+    def DOCTORS(self) -> dict[str, Any]:
         """Backward compatibility accessor for legacy code."""
         return self.roster_data.get("specialties", {})
 
@@ -230,7 +230,7 @@ class ClinicRosterService:
                     )
             conn.commit()
 
-    def reset_slot(self, slot_id: str, slot_date: Optional[str] = None) -> None:
+    def reset_slot(self, slot_id: str, slot_date: str | None = None) -> None:
         """Reset booked_count to 0 for a given slot (for testing and administrative reset)."""
         target_date = slot_date or (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
         self._ensure_slots_for_date(target_date)
@@ -247,7 +247,7 @@ class ClinicRosterService:
             )
             conn.commit()
 
-    def match_doctor_for_specialty(self, target_specialty: str) -> Dict[str, Any]:
+    def match_doctor_for_specialty(self, target_specialty: str) -> dict[str, Any]:
         """Match the recommended specialty to an available CHC doctor profile."""
         _, spec_key = map_specialty(target_specialty)
         specialties = self.roster_data.get("specialties", {})
@@ -255,7 +255,7 @@ class ClinicRosterService:
             return specialties[spec_key]
         return specialties.get("general", {})
 
-    def get_available_slots(self, specialty: str, slot_date: Optional[str] = None) -> Dict[str, Any]:
+    def get_available_slots(self, specialty: str, slot_date: str | None = None) -> dict[str, Any]:
         """Fetch available slots for the given clinical specialty on a specific date (default tomorrow)."""
         spec_enum, spec_key = map_specialty(specialty)
         if not slot_date:
@@ -321,8 +321,8 @@ class ClinicRosterService:
         patient_id: str,
         patient_name: str,
         dossier_id: str,
-        slot_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        slot_date: str | None = None,
+    ) -> dict[str, Any]:
         """
         Record a confirmed appointment booking in SQLite with atomic capacity check.
         Raises ValueError with:
@@ -443,7 +443,7 @@ class ClinicRosterService:
             )
             conn.commit()
 
-    def get_booking(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+    def get_booking(self, ticket_id: str) -> dict[str, Any] | None:
         """Retrieve booking record by ticket ID."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
@@ -459,9 +459,9 @@ class ClinicRosterService:
         ticket_id: str,
         patient_address: str,
         amount_fet: float = 0.5,
-        qr_token: Optional[str] = None,
+        qr_token: str | None = None,
         status: str = "PENDING",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a pending or locked escrow deposit record."""
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         lock_tx = f"sim_tx_{amount_fet}fet_{uuid.uuid4().hex[:12]}" if status == "LOCKED" else None
@@ -534,7 +534,7 @@ class ClinicRosterService:
             conn.commit()
             return updated
 
-    def get_escrow(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+    def get_escrow(self, ticket_id: str) -> dict[str, Any] | None:
         """Retrieve escrow record by ticket ID."""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row

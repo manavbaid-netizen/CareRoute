@@ -9,32 +9,36 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-import time
 import argparse
 import logging
+import time
+import uuid
+
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
-from rich.markdown import Markdown
 
-from config import Config
 from agents import (
-    dispatcher,
     diagnostic_worker,
-    logistics_worker,
+    dispatcher,
     escrow_worker,
-    set_worker_addresses,
     execute_patient_checkin,
+    logistics_worker,
+    set_worker_addresses,
 )
-from services.vlm_service import VLMService
-from services.clinic_roster import ClinicRosterService
-from services.dossier_generator import DossierGeneratorService
+from config import Config
 from models.cards import (
-    make_triage_detail_card,
-    make_slot_picker_card,
     make_booking_receipt_card,
     make_emergency_sos_card,
+    make_slot_picker_card,
+    make_triage_detail_card,
 )
+from services.clinic_roster import ClinicRosterService
+from services.dossier_generator import DossierGeneratorService
+from services.geo_service import GeoService
+from services.health_check import check_system_health
+from services.vlm_service import VLMService
 
 # Setup rich console for clinical UI demonstration
 console = Console()
@@ -113,13 +117,16 @@ def run_interactive_demo() -> None:
 
     vlm = VLMService()
     roster = ClinicRosterService()
+    roster.reset_slot("ALW_CHEST_1000")
     dossier_gen = DossierGeneratorService()
+    geo = GeoService()
 
     console.print("\n" + "=" * 80)
     console.print(
         Panel.fit(
-            "[bold green]CAREROUTE (केयररूट) - CLINICAL PRE-INTAKE SIMULATION[/bold green]\n"
-            "[italic]Autonomous Two-Sided Communication Bridge for Rural Community Health Centers[/italic]",
+            "[bold green]CAREROUTE (केयररूट) - [bold yellow][LOCAL SERVICE SIMULATION][/bold yellow][/bold green]\n"
+            "[italic]Autonomous Two-Sided Communication Bridge for Rural Community Health Centers[/italic]\n"
+            "[dim]Note: Local demonstration executing safe deterministic fallback and simulated escrow.[/dim]",
             border_style="cyan",
         )
     )
@@ -236,9 +243,10 @@ def run_interactive_demo() -> None:
     saved = dossier_gen.save_dossier(dossier, ticket_id=ticket_id)
 
     # Lock simulated escrow
-    mock_lock_tx = f"0x{time.time_ns():x}"
-    console.print(f"[bold green]🔒 ESCROW LOCKED:[/bold green] 0.5 FET committed on-chain.")
-    console.print(f"[cyan]TxHash:[/cyan] {mock_lock_tx} | [cyan]Ticket ID:[/cyan] {ticket_id}")
+    sim_lock_tx = f"sim_tx_{Config.ESCROW_DEPOSIT_FET}fet_{uuid.uuid4().hex[:12]}"
+    roster.lock_escrow_deposit(ticket_id, sim_lock_tx)
+    console.print("[bold green]🔒 ESCROW LOCKED (Simulation):[/bold green] [SIMULATED - PAYMENT_MODE=simulation] 0.5 FET committed in SQLite escrow registry.")
+    console.print(f"[cyan]TxHash:[/cyan] {sim_lock_tx} | [cyan]Ticket ID:[/cyan] {ticket_id}")
 
     # Generate Patient Booking Receipt Card
     receipt_card = make_booking_receipt_card(
@@ -274,7 +282,7 @@ def run_interactive_demo() -> None:
     console.print(f"[cyan]Saved at:[/cyan] {saved['md_path']}")
     console.print(f"[cyan]Structured JSON at:[/cyan] {saved['json_path']}\n")
 
-    with open(saved["md_path"], "r", encoding="utf-8") as f:
+    with open(saved["md_path"], encoding="utf-8") as f:
         md_text = f.read()
 
     console.print(
@@ -337,15 +345,63 @@ def run_interactive_demo() -> None:
             + "\n".join([f"  🚨 {r}" for r in emergency_card['sections'][0]['items']])
             + f"\n\n[bold]DIRECTIVES:[/bold]\n{emergency_card['sections'][1]['content']}\n\n"
             + f"[bold]FIRST AID:[/bold]\n{emergency_card['sections'][2]['content']}\n\n"
-            + f"[bold red]ACTIONS:[/bold red]\n"
+            + "[bold red]ACTIONS:[/bold red]\n"
             + "\n".join([f"  [EMERGENCY BUTTON] {a['label']}" for a in emergency_card['actions']]),
             title="[bold red]ASI Interactive Card: 108 Emergency SOS[/bold red]",
             border_style="red",
         )
     )
 
+    # --------------------------------------------------------------------------
+    # SCENARIO 3: Real-Data Geospatial Tool (OpenStreetMap Overpass CHC Locator)
+    # --------------------------------------------------------------------------
+    console.print("\n[bold yellow]═══ STEP 8: REAL-DATA GEOSPATIAL TOOL (OPENSTREETMAP OVERPASS CHC LOCATOR) ═══[/bold yellow]")
+    chcs = geo.find_nearest_chc(latitude=27.5530, longitude=76.6346, max_results=2)
+    for c in chcs:
+        console.print(
+            Panel(
+                f"[bold]{c['name']}[/bold]\n"
+                f"• Type: {c['facility_type']}\n"
+                f"• Distance: {c['distance_km']} km | Address: {c['address']}\n"
+                f"• Emergency Helpline: [bold red]{c['emergency_helpline']}[/bold red] | Phone: {c['phone']}\n"
+                f"• Source: [cyan]{c['source']}[/cyan]",
+                border_style="cyan",
+            )
+        )
+
     console.print("\n" + "=" * 80)
     console.print("[bold green]✅ All CareRoute simulation scenarios successfully verified![/bold green]\n")
+
+
+def run_health_check() -> None:
+    """Run operational health check on all subsystems and print formatted table."""
+    Config.ensure_directories()
+    results = check_system_health()
+    overall = results["status"]
+    color = "green" if overall == "HEALTHY" else ("yellow" if overall == "DEGRADED" else "red")
+
+    console.print("\n" + "=" * 70)
+    console.print(
+        Panel.fit(
+            f"[bold {color}]CareRoute System Diagnostic Status: {overall}[/bold {color}]\n"
+            f"[cyan]Payment Mode:[/cyan] {results['payment_mode']} | [cyan]Agentverse Mailbox:[/cyan] {results['use_agentverse']} | [cyan]Interactive Cards:[/cyan] {results['use_interactive_cards']}",
+            border_style=color,
+        )
+    )
+
+    table = Table(title="Subsystem Diagnostics", show_lines=True)
+    table.add_column("Subsystem", style="bold cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("Details", style="dim")
+
+    for name, diag in results["components"].items():
+        status = diag.get("status", "UNKNOWN")
+        st_color = "green" if status == "HEALTHY" else ("yellow" if status == "DEGRADED" else "red")
+        details = ", ".join(f"{k}={v}" for k, v in diag.items() if k != "status")
+        table.add_row(name.upper(), f"[{st_color}]{status}[/{st_color}]", details)
+
+    console.print(table)
+    console.print()
 
 
 def main() -> None:
@@ -358,9 +414,16 @@ def main() -> None:
         action="store_true",
         help="Run an end-to-end simulated clinical demonstration in the terminal.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run comprehensive operational health checks on all subsystems.",
+    )
     args = parser.parse_args()
 
-    if args.demo:
+    if args.check:
+        run_health_check()
+    elif args.demo:
         run_interactive_demo()
     else:
         run_bureau()

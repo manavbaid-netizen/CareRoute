@@ -1,47 +1,46 @@
 from __future__ import annotations
 
 import logging
-import json
 import re
 import time
-import datetime
-from typing import Dict, Any, Optional
-from uuid import UUID, uuid4
+from typing import Any
+from uuid import uuid4
 
 from uagents import Agent, Context, Protocol
+from uagents.crypto import Identity
+
 from config import Config
 from models.cards import (
-    make_triage_detail_card,
-    make_slot_picker_card,
+    create_card_chat,
     make_booking_receipt_card,
     make_emergency_sos_card,
-    card_to_markdown,
-    create_card_chat,
+    make_slot_picker_card,
+    make_triage_detail_card,
     parse_card_action,
 )
 from models.chat_models import (
-    ChatMessage,
-    ChatAcknowledgement,
-    TextContent,
-    StartSessionContent,
-    EndSessionContent,
-    ResourceContent,
-    chat_protocol_spec,
-    create_text_chat,
-    create_ack,
-    TriageAnalysisRequest,
-    TriageAnalysisResponse,
-    SlotQueryRequest,
-    SlotQueryResponse,
     BookingCommitRequest,
     BookingCommitResponse,
+    ChatAcknowledgement,
+    ChatMessage,
+    EndSessionContent,
     EscrowLockRequest,
     EscrowLockResponse,
     EscrowReleaseRequest,
     EscrowReleaseResponse,
+    ResourceContent,
+    SlotQueryRequest,
+    SlotQueryResponse,
+    StartSessionContent,
+    TextContent,
+    TriageAnalysisRequest,
+    TriageAnalysisResponse,
+    chat_protocol_spec,
+    create_ack,
+    create_text_chat,
 )
-from services.session_store import SessionStore
 from services.geo_service import GeoService
+from services.session_store import SessionStore
 
 logger = logging.getLogger("CareRoute.Dispatcher")
 
@@ -53,7 +52,7 @@ geo_service = GeoService()
 MAX_INPUT_LENGTH = 1500
 RATE_LIMIT_WINDOW_SECS = 60.0
 MAX_REQUESTS_PER_WINDOW = 20
-_SENDER_MESSAGE_TIMESTAMPS: Dict[str, List[float]] = {}
+_SENDER_MESSAGE_TIMESTAMPS: dict[str, list[float]] = {}
 
 # Initialize Dispatcher (Master Gateway Agent)
 dispatcher = Agent(
@@ -65,7 +64,6 @@ dispatcher = Agent(
     agentverse=f"{Config.AGENTVERSE_API_KEY}@{Config.AGENTVERSE_URL.replace('https://', '')}" if Config.USE_AGENTVERSE and Config.AGENTVERSE_API_KEY else None,
 )
 
-from uagents.crypto import Identity
 
 def get_deterministic_address(seed: str) -> str:
     return Identity.from_seed(seed, 0).address
@@ -183,7 +181,7 @@ async def handle_acp_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowl
     ctx.logger.debug(f"ACK received from {sender} for msg {msg.acknowledged_msg_id}")
 
 
-async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any], user_text: str) -> None:
+async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any], user_text: str) -> None:
     """Process incoming text narrative, button action JSON, or fallback selection with security controls."""
     now = time.time()
 
@@ -239,7 +237,7 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
         ctx.logger.info(f"👤 [CID: {correlation_id}] Patient name identified: {extracted}")
 
     # 4. Parse JSON button action or numeric choice
-    action_data: Optional[Dict[str, Any]] = parse_card_action(user_text)
+    action_data: dict[str, Any] | None = parse_card_action(user_text)
 
     # 5. Check for action triggers
     if action_data and "action" in action_data:

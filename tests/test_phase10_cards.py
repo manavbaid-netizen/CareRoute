@@ -5,21 +5,18 @@ clean plain-text markdown fallback ("Reply 1, 2 or 3"), and button action parsin
 """
 
 import json
-import pytest
-from uagents_core.contrib.protocols.chat import TextContent, MetadataContent, ChatMessage
+
+from uagents_core.contrib.protocols.chat import ChatMessage, MetadataContent, TextContent
 
 from models.cards import (
     InteractiveCard,
-    CardAction,
-    CardHeader,
-    CardSection,
     card_to_markdown,
-    parse_card_action,
     create_card_chat,
-    make_triage_detail_card,
-    make_slot_picker_card,
     make_booking_receipt_card,
     make_emergency_sos_card,
+    make_slot_picker_card,
+    make_triage_detail_card,
+    parse_card_action,
 )
 
 

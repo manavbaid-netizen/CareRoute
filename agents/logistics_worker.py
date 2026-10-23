@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+
 from uagents import Agent, Context
+
 from config import Config
-from services.clinic_roster import ClinicRosterService
-from services.dossier_generator import DossierGeneratorService
 from models.chat_models import (
-    SlotQueryRequest,
-    SlotQueryResponse,
     BookingCommitRequest,
     BookingCommitResponse,
+    SlotQueryRequest,
+    SlotQueryResponse,
 )
+from services.clinic_roster import ClinicRosterService
+from services.dossier_generator import DossierGeneratorService
 
 logger = logging.getLogger("CareRoute.LogisticsWorker")
 

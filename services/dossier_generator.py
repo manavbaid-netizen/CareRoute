@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+
 from config import Config
 from models.clinical_schemas import ClinicalDossier
 
@@ -15,11 +15,11 @@ class DossierGeneratorService:
     Saves and renders both structured JSON files and printable Markdown OPD records.
     """
 
-    def __init__(self, storage_dir: Optional[Path] = None) -> None:
+    def __init__(self, storage_dir: Path | None = None) -> None:
         self.storage_dir = storage_dir or Config.DOSSIERS_DIR
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_dossier(self, dossier: ClinicalDossier, ticket_id: Optional[str] = None) -> Dict[str, str]:
+    def save_dossier(self, dossier: ClinicalDossier, ticket_id: str | None = None) -> dict[str, str]:
         """
         Persist the clinical dossier to disk as both JSON and formatted Markdown.
         Returns paths to the saved files.
@@ -40,12 +40,12 @@ class DossierGeneratorService:
 
         return {"json_path": str(json_path), "md_path": str(md_path)}
 
-    def load_dossier(self, ref_id: str) -> Optional[ClinicalDossier]:
+    def load_dossier(self, ref_id: str) -> ClinicalDossier | None:
         """Load a persisted clinical dossier by ticket ID or dossier ID."""
         json_path = self.storage_dir / f"{ref_id}.json"
         if not json_path.exists():
             return None
-        with open(json_path, "r", encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8") as f:
             raw_content = f.read()
             return ClinicalDossier.model_validate_json(raw_content)
 
