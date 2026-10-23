@@ -53,6 +53,7 @@ async def handle_slot_query(
         specialty=result["specialty"],
         room_no=result["room_no"],
         slots=result["slots"],
+        correlation_id=getattr(msg, "correlation_id", ""),
     )
     ctx.logger.info(
         f"✅ Found doctor: {result['doctor_name']} ({result['room_no']}) with {len(result['slots'])} slots."
@@ -140,6 +141,7 @@ async def handle_booking_commit(
         qr_payload=booking["qr_payload"],
         status="CONFIRMED",
         dossier_path=dossier_path,
+        correlation_id=getattr(msg, "correlation_id", ""),
     )
     ctx.logger.info(f"🎉 Appointment successfully confirmed! Ticket: {booking['ticket_id']}")
     await ctx.send(sender, response)

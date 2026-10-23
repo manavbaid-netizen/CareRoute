@@ -195,6 +195,7 @@ async def handle_escrow_lock(
         status="LOCKED",
         amount_fet=msg.amount_fet,
         created_at=now_iso,
+        correlation_id=getattr(msg, "correlation_id", ""),
     )
     await ctx.send(sender, response)
 

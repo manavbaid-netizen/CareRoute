@@ -22,8 +22,8 @@
 | Phase 8 | Real Payment Protocol & secure escrow | ✅ DONE | Official `payment_protocol_spec` with `seller` role, `CommitPayment` handler, SQLite `escrow` table (single source of truth), clinic desk auth, double-refund prevention, honest simulation labelling |
 | Phase 9 | Booking logic & capacity | ✅ DONE | Atomic capacity decrement, per-date slots, Specialty enum, honest slot errors, foreign keys, deterministic patient identity |
 | Phase 10 | ASI1 Interactive Cards | ✅ DONE | Pydantic v2 InteractiveCard schema, MetadataContent ACP packaging, mobile touch labels, robust numbered text fallback, action parsing |
-| Phase 11 | Orchestration & Tools | ⏳ NEXT | Timeouts, correlation IDs, OpenStreetMap/Overpass CHC locator, agent health check |
-| Phase 12 | Tests, CI, Docs & README | ⏳ PENDING | GitHub CI, updated README with badges, Devpost demo script |
+| Phase 11 | Orchestration & Tools | ✅ DONE | Correlation IDs, timeout & 1-retry watchdog, OpenStreetMap Overpass CHC locator with caching/fallback, health check, rate limits |
+| Phase 12 | Tests, CI, Docs & README | ⏳ NEXT | GitHub Actions CI workflow, honest README with Innovation Lab badges, demo script, Devpost checklist, main.py cleanup |
 
 ---
 
@@ -129,6 +129,21 @@
     - Replaced raw text calls with `create_card_chat()` across triage, slot query, and escrow lock responses.
     - Wired `parse_card_action()` into user message loop, cleanly handling button action JSON and numeric slot choices.
   - `tests/test_phase10_cards.py`: Added 10 tests covering schema validation for all 4 card types, markdown fallback formatting, ACP dual-content packaging (`TextContent` + `MetadataContent`), disabled interactive flag fallback, button JSON action parsing, numeric fallback choices, and mobile label length constraints.
-- **Tests Passing**: 62/62 tests passing across entire suite.
-- **Open Items**: Proceeding to Phase 11 (Orchestration Quality & Real Tools).
-- **Exact Next Step**: Phase 11 — Implement correlation IDs, request timeouts and retries in Dispatcher, OpenStreetMap/Overpass local CHC locator tool with offline fallback and caching, startup health check, rate limiting, and write `tests/test_phase11_orchestration.py`.
+- **Tests Passing**: 62/62 tests passing at Phase 10.
+## Phase 11 Detail
+- **Phases Done**: Step 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 7, Phase 6, Phase 5, Phase 8, Phase 9, Phase 10, Phase 11
+- **Files Changed**:
+  - `models/chat_models.py`: Added 8-char `correlation_id` default factory across all worker IPC models (`TriageAnalysisRequest/Response`, `SlotQueryRequest/Response`, `BookingCommitRequest/Response`, `EscrowLockRequest/Response`, `EscrowReleaseRequest/Response`).
+  - `agents/diagnostic_worker.py`, `agents/logistics_worker.py`, `agents/escrow_worker.py`: Propagated `correlation_id` back in all worker responses.
+  - `services/geo_service.py`: Created real-data tool using OpenStreetMap Overpass API (`https://overpass-api.de/api/interpreter`) with disk cache (`data/cache/osm_geo_cache.json`) and verified offline fallback directory of Alwar / Rajasthan CHCs with Haversine distance sorting.
+  - `services/health_check.py`: Created comprehensive multi-subsystem health check (`check_system_health()`) validating SQLite tables, clinic roster, storage permissions, and geo service.
+  - `agents/dispatcher.py`:
+    - Enforced `MAX_INPUT_LENGTH = 1500` characters with polite Hindi notification.
+    - Enforced per-sender rate limiting (`MAX_REQUESTS_PER_WINDOW = 20` requests / 60 seconds).
+    - Distributed `correlation_id` generation and tracking in sessions and logs (`[CID: {cid}]`).
+    - Implemented request timeout watchdog (`@dispatcher.on_interval(period=3.0)`) with 1-retry recovery and graceful degradation message upon retry exhaustion.
+    - Routed natural language inquiries for nearby hospitals/CHCs to `GeoService`.
+  - `tests/test_phase11_orchestration.py`: Added 9 tests covering correlation IDs, input length limits, per-sender rate limiting, watchdog timeout with single retry, graceful degradation on exhausted retry, Haversine formula calculation, offline verified CHC fallback, Overpass response caching, and system health checks.
+- **Tests Passing**: 71/71 tests passing across entire suite.
+- **Open Items**: Proceeding to Phase 12 (Tests, CI, Docs & README).
+- **Exact Next Step**: Phase 12 — Add `.github/workflows/ci.yml`, rewrite `README.md` with Innovation Lab badges, honest capability claims, mermaid architecture diagram, env vars table, ASI:One testing guide, write `docs/demo_script.md` and `docs/devpost_description.md`, update `main.py` with `--check` and honest demo labelling, run full test suite and demo.

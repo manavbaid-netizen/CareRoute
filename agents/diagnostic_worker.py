@@ -73,6 +73,7 @@ async def handle_triage_request(
         hindi_summary=hindi_summary,
         is_emergency=is_emergency,
         emergency_reasons=emergency_reasons,
+        correlation_id=getattr(msg, "correlation_id", ""),
     )
     await ctx.send(sender, response)
 

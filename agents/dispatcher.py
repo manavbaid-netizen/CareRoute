@@ -6,7 +6,7 @@ import re
 import time
 import datetime
 from typing import Dict, Any, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from uagents import Agent, Context, Protocol
 from config import Config
@@ -41,11 +41,19 @@ from models.chat_models import (
     EscrowReleaseResponse,
 )
 from services.session_store import SessionStore
+from services.geo_service import GeoService
 
 logger = logging.getLogger("CareRoute.Dispatcher")
 
 # Session store backed by SQLite
 session_store = SessionStore()
+geo_service = GeoService()
+
+# Security & Traffic Controls
+MAX_INPUT_LENGTH = 1500
+RATE_LIMIT_WINDOW_SECS = 60.0
+MAX_REQUESTS_PER_WINDOW = 20
+_SENDER_MESSAGE_TIMESTAMPS: Dict[str, List[float]] = {}
 
 # Initialize Dispatcher (Master Gateway Agent)
 dispatcher = Agent(
@@ -176,8 +184,47 @@ async def handle_acp_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowl
 
 
 async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any], user_text: str) -> None:
-    """Process incoming text narrative, button action JSON, or fallback selection."""
-    ctx.logger.info(f"💬 User text from {sender}: '{user_text}' [State: {session['state']}]")
+    """Process incoming text narrative, button action JSON, or fallback selection with security controls."""
+    now = time.time()
+
+    # 1. Enforce Input Length Limits (Prevent buffer bloat / prompt injection)
+    if len(user_text) > MAX_INPUT_LENGTH:
+        ctx.logger.warning(f"⚠️ Input exceeded {MAX_INPUT_LENGTH} chars from {sender}")
+        err_msg = (
+            f"⚠️ आपका संदेश बहुत लंबा है ({len(user_text)} अक्षर)। "
+            f"कृपया संक्षेप में अपने मुख्य लक्षण बताएं (अधिकतम {MAX_INPUT_LENGTH} अक्षर)।"
+        )
+        await ctx.send(sender, create_text_chat(err_msg))
+        return
+
+    # 2. Enforce Per-Sender Rate Limits
+    timestamps = _SENDER_MESSAGE_TIMESTAMPS.setdefault(sender, [])
+    _SENDER_MESSAGE_TIMESTAMPS[sender] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW_SECS]
+    if len(_SENDER_MESSAGE_TIMESTAMPS[sender]) >= MAX_REQUESTS_PER_WINDOW:
+        ctx.logger.warning(f"🛑 Rate limit exceeded for {sender} ({len(_SENDER_MESSAGE_TIMESTAMPS[sender])} reqs/min)")
+        rate_msg = (
+            "⚠️ आपके पते से बहुत अधिक संदेश प्राप्त हुए हैं। "
+            "कृपया एक मिनट प्रतीक्षा करने के बाद पुनः प्रयास करें।"
+        )
+        await ctx.send(sender, create_text_chat(rate_msg))
+        return
+    _SENDER_MESSAGE_TIMESTAMPS[sender].append(now)
+
+    # Correlation ID for distributed tracing across agent graph
+    correlation_id = uuid4().hex[:8]
+    session["correlation_id"] = correlation_id
+    ctx.logger.info(f"💬 [CID: {correlation_id}] User text from {sender}: '{user_text[:60]}...' [State: {session['state']}]")
+
+    # 3. Check for nearby CHC / Hospital inquiry
+    if any(kw in user_text.lower() for kw in ["अस्पताल", "नजदीकी अस्पताल", "chc", "hospital", "निकटतम", "nearest chc"]):
+        facilities = geo_service.find_nearest_chc(max_results=3)
+        chc_header = "🏥 **अलवर जिले के निकटतम सामुदायिक स्वास्थ्य केंद्र (Nearby CHCs):**\n\n"
+        chc_body = "\n\n─────────────────\n\n".join(
+            geo_service.format_chc_recommendation_hindi(f) for f in facilities
+        )
+        await ctx.send(sender, create_text_chat(f"{chc_header}{chc_body}"))
+        ctx.logger.info(f"📍 [CID: {correlation_id}] Dispatched nearest CHC information to {sender}")
+        return
 
     # Extract patient name if explicitly volunteered
     name_match = re.search(
@@ -189,25 +236,36 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
         extracted = name_match.group(1).strip()
         session["patient_name"] = extracted
         session_store.save_session(sender, session)
-        ctx.logger.info(f"👤 Patient name identified: {extracted}")
+        ctx.logger.info(f"👤 [CID: {correlation_id}] Patient name identified: {extracted}")
 
-    # 1. Parse JSON button action or numeric choice
+    # 4. Parse JSON button action or numeric choice
     action_data: Optional[Dict[str, Any]] = parse_card_action(user_text)
 
-    # 2. Check for action triggers
+    # 5. Check for action triggers
     if action_data and "action" in action_data:
         action = action_data.get("action")
 
         if action == "view_slots":
             specialty = action_data.get("specialty", session.get("recommended_specialty", "General Medicine"))
             session["state"] = "STATE_SLOT_SELECTED"
-            session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
+            session["pending_request"] = {
+                "type": "slots",
+                "sent_at": now,
+                "retries": 0,
+                "correlation_id": correlation_id,
+                "specialty": specialty,
+            }
             session_store.save_session(sender, session)
 
             if WORKER_ADDRESSES["logistics"]:
                 await ctx.send(
                     WORKER_ADDRESSES["logistics"],
-                    SlotQueryRequest(session_id=sender, specialty=specialty, user_address=sender),
+                    SlotQueryRequest(
+                        session_id=sender,
+                        specialty=specialty,
+                        user_address=sender,
+                        correlation_id=correlation_id,
+                    ),
                 )
             return
 
@@ -226,7 +284,14 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                 await ctx.send(sender, create_text_chat(warn_text))
                 return
 
-            session["pending_request"] = {"type": "booking", "sent_at": time.time(), "retries": 0}
+            session["pending_request"] = {
+                "type": "booking",
+                "sent_at": now,
+                "retries": 0,
+                "correlation_id": correlation_id,
+                "slot_id": slot_id,
+                "dossier_id": dossier_id,
+            }
             session_store.save_session(sender, session)
 
             if WORKER_ADDRESSES["logistics"]:
@@ -239,6 +304,7 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                         slot_id=slot_id,
                         dossier_id=dossier_id,
                         user_address=sender,
+                        correlation_id=correlation_id,
                     ),
                 )
             return
@@ -254,6 +320,7 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                         scanned_by="alwar_chc_reception_desk",
                         qr_token=qr_token,
                         sender_address=sender,
+                        correlation_id=correlation_id,
                     ),
                 )
             return
@@ -270,7 +337,14 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                     await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
                     return
 
-                session["pending_request"] = {"type": "booking", "sent_at": time.time(), "retries": 0}
+                session["pending_request"] = {
+                    "type": "booking",
+                    "sent_at": now,
+                    "retries": 0,
+                    "correlation_id": correlation_id,
+                    "slot_id": chosen["slot_id"],
+                    "dossier_id": dossier_id,
+                }
                 session_store.save_session(sender, session)
 
                 if WORKER_ADDRESSES["logistics"]:
@@ -283,6 +357,7 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                             slot_id=chosen["slot_id"],
                             dossier_id=dossier_id,
                             user_address=sender,
+                            correlation_id=correlation_id,
                         ),
                     )
                 return
@@ -342,10 +417,16 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
 
     # 5. Symptom narrative input -> route to Diagnostic Worker
     session["state"] = "STATE_ANALYZING"
-    session["pending_request"] = {"type": "triage", "sent_at": time.time(), "retries": 0}
+    session["pending_request"] = {
+        "type": "triage",
+        "sent_at": now,
+        "retries": 0,
+        "correlation_id": correlation_id,
+        "text_transcript": user_text,
+    }
     session_store.save_session(sender, session)
 
-    ctx.logger.info(f"🔍 Routing symptom intake to DiagnosticWorkerAgent for {sender}")
+    ctx.logger.info(f"🔍 [CID: {correlation_id}] Routing symptom intake to DiagnosticWorkerAgent for {sender}")
     if WORKER_ADDRESSES["diagnostic"]:
         await ctx.send(
             WORKER_ADDRESSES["diagnostic"],
@@ -355,6 +436,7 @@ async def _process_user_text(ctx: Context, sender: str, session: Dict[str, Any],
                 patient_name=session["patient_name"],
                 text_transcript=user_text,
                 user_address=sender,
+                correlation_id=correlation_id,
             ),
         )
 
@@ -540,7 +622,7 @@ async def handle_escrow_release_response(ctx: Context, sender: str, msg: EscrowR
 # WATCHDOG TIMER: TIMEOUTS & RETRIES
 # ==============================================================================
 
-@dispatcher.on_interval(period=5.0)
+@dispatcher.on_interval(period=3.0)
 async def request_timeout_watchdog(ctx: Context) -> None:
     """
     Periodic watchdog checking for worker IPC request timeouts.
@@ -552,38 +634,66 @@ async def request_timeout_watchdog(ctx: Context) -> None:
         if not pending:
             continue
 
-        elapsed = now - pending.get("sent_at", now)
-        if elapsed > 15.0:  # 15 seconds timeout
+        sent_at = pending.get("sent_at", now)
+        elapsed = now - sent_at
+        cid = pending.get("correlation_id", "none")
+        req_type = pending.get("type", "")
+
+        if elapsed > 8.0:  # 8 seconds timeout
             retries = pending.get("retries", 0)
             if retries < 1:
                 pending["retries"] = retries + 1
                 pending["sent_at"] = now
                 session_store.save_session(user_addr, session)
                 ctx.logger.warning(
-                    f"⏱️ Worker response timeout for {user_addr} (type: {pending.get('type')}). Retrying..."
+                    f"⏱️ [CID: {cid}] Worker response timeout for {user_addr} (type: {req_type}). Retrying (attempt 2)..."
                 )
                 # Resend request based on type
-                if pending.get("type") == "triage" and WORKER_ADDRESSES["diagnostic"]:
+                if req_type == "triage" and WORKER_ADDRESSES["diagnostic"]:
                     await ctx.send(
                         WORKER_ADDRESSES["diagnostic"],
                         TriageAnalysisRequest(
                             session_id=user_addr,
                             patient_id=session["patient_id"],
                             patient_name=session["patient_name"],
-                            text_transcript=session.get("last_symptom_text", "तबीयत खराब है"),
+                            text_transcript=pending.get("text_transcript", "तबीयत खराब है"),
                             user_address=user_addr,
+                            correlation_id=cid,
+                        ),
+                    )
+                elif req_type == "slots" and WORKER_ADDRESSES["logistics"]:
+                    await ctx.send(
+                        WORKER_ADDRESSES["logistics"],
+                        SlotQueryRequest(
+                            session_id=user_addr,
+                            specialty=pending.get("specialty", "General Medicine"),
+                            user_address=user_addr,
+                            correlation_id=cid,
+                        ),
+                    )
+                elif req_type == "booking" and WORKER_ADDRESSES["logistics"]:
+                    await ctx.send(
+                        WORKER_ADDRESSES["logistics"],
+                        BookingCommitRequest(
+                            session_id=user_addr,
+                            patient_id=session["patient_id"],
+                            patient_name=session["patient_name"],
+                            slot_id=pending.get("slot_id", ""),
+                            dossier_id=pending.get("dossier_id", ""),
+                            user_address=user_addr,
+                            correlation_id=cid,
                         ),
                     )
             else:
-                # Failed after retry
+                # Failed after retry -> graceful degradation
                 session["pending_request"] = None
                 session_store.save_session(user_addr, session)
                 timeout_msg = (
-                    "⚠️ सर्वर से संपर्क करने में अधिक समय लग रहा है। "
-                    "कृपया पुनः प्रयास करें (Reply 'retry' या 'दोबारा')।"
+                    "⚠️ स्वास्थ्य केंद्र सर्वर से संपर्क करने में अधिक समय लग रहा है। "
+                    "कृपया कुछ क्षण बाद पुनः प्रयास करें या सीधे 108 एम्बुलेंस / नजदीकी CHC पर संपर्क करें।"
                 )
                 await ctx.send(user_addr, create_text_chat(timeout_msg))
-                ctx.logger.error(f"❌ Worker IPC request failed after retry for {user_addr}")
+                ctx.logger.error(f"❌ [CID: {cid}] Worker IPC request failed after retry for {user_addr}")
 
 
 # Include real Agent Chat Protocol in dispatcher with published manifest

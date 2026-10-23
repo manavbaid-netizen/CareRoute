@@ -67,6 +67,7 @@ class TriageAnalysisRequest(Model):
     image_data: Optional[str] = None  # Base64 string or filename/mock token
     image_type: Optional[str] = None  # "lesion_photo" | "prescription_slip"
     user_address: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class TriageAnalysisResponse(Model):
@@ -80,6 +81,7 @@ class TriageAnalysisResponse(Model):
     hindi_summary: str
     is_emergency: bool = False
     emergency_reasons: List[str] = Field(default_factory=list)
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class SlotQueryRequest(Model):
@@ -91,6 +93,7 @@ class SlotQueryRequest(Model):
     specialty: str
     clinic_id: Optional[str] = None
     user_address: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class SlotQueryResponse(Model):
@@ -104,6 +107,7 @@ class SlotQueryResponse(Model):
     specialty: str
     room_no: str
     slots: List[Dict[str, Any]]
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class BookingCommitRequest(Model):
@@ -118,6 +122,7 @@ class BookingCommitRequest(Model):
     dossier_id: str
     slot_date: Optional[str] = None
     user_address: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class BookingCommitResponse(Model):
@@ -137,6 +142,7 @@ class BookingCommitResponse(Model):
     dossier_path: Optional[str] = None
     slot_date: Optional[str] = None
     error_message: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class EscrowLockRequest(Model):
@@ -149,6 +155,7 @@ class EscrowLockRequest(Model):
     ticket_id: str
     amount_fet: float = 0.5
     user_address: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class EscrowLockResponse(Model):
@@ -162,6 +169,7 @@ class EscrowLockResponse(Model):
     amount_fet: float
     tx_hash: str
     created_at: str
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class EscrowReleaseRequest(Model):
@@ -172,6 +180,7 @@ class EscrowReleaseRequest(Model):
     scanned_by: str
     qr_token: Optional[str] = None
     sender_address: Optional[str] = None
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
 
 
 class EscrowReleaseResponse(Model):
@@ -183,3 +192,4 @@ class EscrowReleaseResponse(Model):
     refund_amount_fet: float
     refund_tx_hash: str
     message: str
+    correlation_id: str = Field(default_factory=lambda: uuid4().hex[:8])
