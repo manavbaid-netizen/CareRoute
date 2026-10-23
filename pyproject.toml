@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careroute"
+version = "0.2.0"
+description = "Hindi-first rural telehealth bridge connecting patients on ASI:One to CHC doctors with Fetch.ai agents"
+requires-python = ">=3.10"
+dependencies = [
+    "uagents>=0.26.0",
+    "uagents-core>=0.4.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "requests>=2.31.0",
+    "openai>=1.0.0"
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+    "B008", # do not perform function calls in argument defaults
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests", "."]
+python_files = ["test_*.py"]

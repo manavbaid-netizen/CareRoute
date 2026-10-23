@@ -1,0 +1,42 @@
+{
+  "_comment": "CareRoute Community Health Center (CHC) Doctors and OPD Slot Roster (Labelled Demo Data)",
+  "clinic_id": "chc_alwar_01",
+  "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+  "specialties": {
+    "pulmonology": {
+      "doctor_name": "Dr. Harish Sharma (एमडी, चेस्ट एवं जनरल फिजिशियन)",
+      "specialty": "Pulmonology / Chest & Respiratory Medicine",
+      "specialty_hi": "छाती एवं फेफड़ा रोग विशेषज्ञ",
+      "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+      "room_no": "कक्ष संख्या 4 (Room 4)",
+      "slots": [
+        {"slot_id": "ALW_CHEST_1000", "time": "10:00 AM - 10:30 AM", "capacity": 5},
+        {"slot_id": "ALW_CHEST_1130", "time": "11:30 AM - 12:00 PM", "capacity": 3},
+        {"slot_id": "ALW_CHEST_1230", "time": "12:30 PM - 01:00 PM", "capacity": 4}
+      ]
+    },
+    "dermatology": {
+      "doctor_name": "Dr. Sunita Verma (एमडी, त्वचा एवं चर्म रोग)",
+      "specialty": "Dermatology & Venereology",
+      "specialty_hi": "त्वचा एवं चर्म रोग विशेषज्ञ",
+      "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+      "room_no": "कक्ष संख्या 7 (Room 7)",
+      "slots": [
+        {"slot_id": "ALW_DERM_1030", "time": "10:30 AM - 11:00 AM", "capacity": 4},
+        {"slot_id": "ALW_DERM_1145", "time": "11:45 AM - 12:15 PM", "capacity": 2},
+        {"slot_id": "ALW_DERM_1245", "time": "12:45 PM - 01:15 PM", "capacity": 5}
+      ]
+    },
+    "general": {
+      "doctor_name": "Dr. Rajesh Meena (एमबीबीएस, वरिष्ठ चिकित्सा अधिकारी)",
+      "specialty": "General Medicine & Primary Health",
+      "specialty_hi": "सामान्य रोग विशेषज्ञ (General Physician)",
+      "clinic_name": "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+      "room_no": "कक्ष संख्या 2 (Room 2)",
+      "slots": [
+        {"slot_id": "ALW_GEN_0930", "time": "09:30 AM - 10:00 AM", "capacity": 6},
+        {"slot_id": "ALW_GEN_1100", "time": "11:00 AM - 11:30 AM", "capacity": 5}
+      ]
+    }
+  }
+}

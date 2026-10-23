@@ -1,0 +1,17 @@
+# CareRoute Core Dependencies (Python >= 3.10 required)
+uagents==0.26.1
+uagents-core==0.4.12
+pydantic==2.14.1
+pydantic-core==2.50.1
+python-dotenv==1.2.4
+google-genai==2.33.0; python_version >= "3.10"
+openai==3.37.0
+requests==2.34.2
+rich==15.0.0
+cosmpy==0.12.2
+httpx==0.28.1
+aiohttp==3.14.5
+
+# Development, Testing & Code Quality
+pytest==9.1.1
+ruff==0.17.2

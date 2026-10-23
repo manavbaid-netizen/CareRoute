@@ -1,0 +1,33 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Sensitive environment configuration & secrets
+.env
+.env.local
+.env.*.local
+*.seed
+*.pem
+*.key
+
+# Data persistence (SQLite DBs, patient records, bookings)
+data/*.db
+data/*.sqlite
+data/dossiers/
+data/bookings/
+
+# Operating system artifacts
+.DS_Store
+__MACOSX/
+Thumbs.db
+desktop.ini

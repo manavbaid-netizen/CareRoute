@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""
+Generate cryptographically secure random seeds for CareRoute Fetch.ai agents.
+Use these to populate your local .env file. NEVER commit real seeds to git.
+"""
+
+import secrets
+import string
+
+# Wordlist subset for human-readable yet cryptographically strong 12-word seeds
+WORDS = [
+    "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
+    "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid",
+    "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual",
+    "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance",
+    "advice", "aerobic", "affair", "afford", "afraid", "again", "agent", "agree",
+    "ahead", "aim", "air", "airport", "aisle", "alarm", "album", "alcohol",
+    "alert", "alien", "all", "alley", "allow", "almost", "alone", "alpha",
+    "already", "also", "alter", "always", "amateur", "amazing", "among", "amount",
+    "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry", "animal",
+    "ankle", "announce", "annual", "another", "answer", "antenna", "antique", "anxiety",
+    "any", "apart", "apology", "appear", "apple", "approve", "april", "arch",
+    "arctic", "area", "arena", "argue", "arm", "armed", "armor", "army",
+    "around", "arrange", "arrest", "arrive", "arrow", "art", "artefact", "artist",
+    "artwork", "ask", "aspect", "assault", "asset", "assist", "assume", "asthma",
+    "athlete", "atom", "attack", "attend", "attitude", "attract", "auction", "audit",
+    "august", "aunt", "author", "auto", "autumn", "average", "avocado", "avoid",
+    "awake", "aware", "away", "awesome", "awful", "awkward", "axis", "baby",
+    "bachelor", "bacon", "badge", "bag", "balance", "balcony", "ball", "bamboo",
+    "banana", "banner", "bar", "barely", "bargain", "barrel", "base", "basic",
+    "basket", "battle", "beach", "bean", "beauty", "because", "become", "beef",
+    "before", "begin", "behave", "behind", "believe", "below", "belt", "bench",
+    "benefit", "best", "betray", "better", "between", "beyond", "bicycle", "bid",
+    "bike", "bind", "biology", "bird", "birth", "bitter", "black", "blade",
+    "blame", "blanket", "blast", "bleak", "bless", "blind", "blood", "blossom",
+    "blouse", "blue", "blur", "blush", "board", "boat", "body", "boil",
+    "bomb", "bone", "bonus", "book", "boost", "border", "boring", "borrow",
+    "boss", "bottom", "bounce", "box", "boy", "bracket", "brain", "brand",
+    "brass", "brave", "bread", "breeze", "brick", "bridge", "brief", "bright",
+    "bring", "brisk", "broccoli", "broken", "bronze", "broom", "brother", "brown",
+    "brush", "bubble", "buddy", "budget", "buffalo", "build", "bulb", "bulk",
+    "bullet", "bundle", "bunker", "burden", "burger", "burst", "bus", "business",
+    "busy", "butter", "buyer", "buzz", "cabbage", "cabin", "cable", "cactus",
+    "cage", "cake", "call", "calm", "camera", "camp", "can", "canal"
+]
+
+
+def generate_seed_phrase(words_count: int = 12) -> str:
+    """Generate a high-entropy mnemonic phrase."""
+    return " ".join(secrets.choice(WORDS) for _ in range(words_count))
+
+
+def main() -> None:
+    print("# === Newly Generated Fetch.ai Agent Seed Phrases ===")
+    print("# Copy these into your local .env file. NEVER commit this to git!\n")
+    seeds = {
+        "DISPATCHER_SEED": generate_seed_phrase(12),
+        "DIAGNOSTIC_SEED": generate_seed_phrase(12),
+        "LOGISTICS_SEED": generate_seed_phrase(12),
+        "ESCROW_SEED": generate_seed_phrase(12),
+    }
+    for key, val in seeds.items():
+        print(f'{key}="{val}"')
+    print("\n# Verification token for clinic checkin desk:")
+    desk_token = secrets.token_hex(16)
+    print(f'CLINIC_DESK_TOKEN="{desk_token}"')
+
+
+if __name__ == "__main__":
+    main()
