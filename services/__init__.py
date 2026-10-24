@@ -5,7 +5,7 @@ from services.dossier_generator import DossierGeneratorService
 from services.vlm_service import VLMService
 
 __all__ = [
-    "VLMService",
     "ClinicRosterService",
     "DossierGeneratorService",
+    "VLMService",
 ]

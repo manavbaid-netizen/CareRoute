@@ -50,7 +50,7 @@ def test_full_primary_telehealth_lifecycle(clean_environment):
     symptom_text = "मुझे पिछले 3 हफ्तों से लगातार खांसी आ रही है और शाम को बुखार के साथ पसीना आता है।"
 
     # Step 1: Vernacular Triage
-    dossier, hindi_summary, is_emergency, emergency_reasons = vlm.analyze_case(
+    dossier, _hindi_summary, is_emergency, _emergency_reasons = vlm.analyze_case(
         session_id=patient_addr,
         patient_id=patient_id,
         patient_name=patient_name,
@@ -160,16 +160,18 @@ def test_llm_outage_graceful_degradation():
     client.openai_client = MagicMock()
 
     # Simulate network outage on primary ASI:One, secondary Gemini, and tertiary OpenAI
-    with patch.object(
-        client, "_call_openai_compatible", side_effect=Exception("ASI:One connection timed out")
+    with (
+        patch.object(
+            client, "_call_openai_compatible", side_effect=Exception("ASI:One connection timed out")
+        ),
+        patch.object(client, "_call_gemini", side_effect=Exception("Gemini quota exceeded")),
     ):
-        with patch.object(client, "_call_gemini", side_effect=Exception("Gemini quota exceeded")):
-            dossier, hindi_summary, is_em, reasons = client.generate_clinical_dossier(
-                session_id="test_down",
-                patient_id="p1",
-                patient_name="Ram",
-                text_transcript="मुझे दो हफ्ते से खांसी और बुखार है",
-            )
+        dossier, _hindi_summary, _is_em, _reasons = client.generate_clinical_dossier(
+            session_id="test_down",
+            patient_id="p1",
+            patient_name="Ram",
+            text_transcript="मुझे दो हफ्ते से खांसी और बुखार है",
+        )
 
     assert "fallback" in dossier.engine
     assert dossier.assessment.triage_urgency in (

@@ -80,7 +80,7 @@ def test_llm_valid_json_parsing(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, reasons = client.generate_clinical_dossier(
+        dossier, summary, is_em, _reasons = client.generate_clinical_dossier(
             session_id="test_asi1_valid",
             patient_id="PAT_01",
             patient_name="Mohan Lal",
@@ -109,7 +109,7 @@ def test_llm_fence_stripping_and_clean_json(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, _ = client.generate_clinical_dossier(
+        dossier, _summary, _is_em, _ = client.generate_clinical_dossier(
             session_id="test_fence",
             patient_id="PAT_02",
             patient_name="Sita Devi",
@@ -138,7 +138,7 @@ def test_llm_malformed_json_retry_success(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, _ = client.generate_clinical_dossier(
+        dossier, _summary, _is_em, _ = client.generate_clinical_dossier(
             session_id="test_retry",
             patient_id="PAT_03",
             patient_name="Ram",
@@ -162,7 +162,7 @@ def test_llm_malformed_json_persistent_fallback(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, _ = client.generate_clinical_dossier(
+        dossier, _summary, _is_em, _ = client.generate_clinical_dossier(
             session_id="test_bad_fallback",
             patient_id="PAT_04",
             patient_name="Ram",
@@ -183,7 +183,7 @@ def test_llm_timeout_triggers_graceful_fallback(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, _ = client.generate_clinical_dossier(
+        dossier, _summary, is_em, _ = client.generate_clinical_dossier(
             session_id="test_timeout",
             patient_id="PAT_05",
             patient_name="Geeta",
@@ -208,7 +208,7 @@ def test_llm_401_authentication_error_fallback(mock_fallback_engine):
     client.asi1_client = mock_openai
 
     with patch("config.Config.USE_MOCK_VLM", False):
-        dossier, summary, is_em, _ = client.generate_clinical_dossier(
+        dossier, _summary, _is_em, _ = client.generate_clinical_dossier(
             session_id="test_401",
             patient_id="PAT_06",
             patient_name="Sunita",
@@ -224,7 +224,7 @@ def test_honest_vision_handling(mock_fallback_engine):
     """Assert when an image is provided without a vision model, the system honestly states analysis is unavailable."""
     client = LLMClient(fallback_engine=mock_fallback_engine)
 
-    dossier, summary, is_em, _ = client.generate_clinical_dossier(
+    dossier, summary, _is_em, _ = client.generate_clinical_dossier(
         session_id="test_vision_honest",
         patient_id="PAT_VIS",
         patient_name="Anoop",

@@ -27,7 +27,7 @@ def test_redflag_corpus_minimum_count():
 def test_finding_7_exact_sentence_detected():
     """Verify the exact sentence from main.py / finding 7 fires an emergency."""
     exact_text = "सीने में बहुत तेज दर्द हो रहा है और सांस लेने में भारी तकलीफ है"
-    is_em, reasons, hits = SafetyService.scan_for_emergencies(exact_text)
+    is_em, reasons, _hits = SafetyService.scan_for_emergencies(exact_text)
     assert is_em is True
     assert len(reasons) >= 1
     # Check that reasons are specific, not generic
@@ -86,7 +86,7 @@ def test_finding_7_negation_no_false_positives():
     ]
 
     for text in negated_cases:
-        is_em, reasons, hits = SafetyService.scan_for_emergencies(text)
+        is_em, reasons, _hits = SafetyService.scan_for_emergencies(text)
         assert is_em is False, (
             f"False positive triggered for negated phrase: '{text}', reasons: {reasons}"
         )
@@ -104,7 +104,7 @@ def test_full_corpus_100_percent_critical_positives():
     for case in cases:
         text = case["text"]
         expected = case["expected_emergency"]
-        is_em, reasons, hits = SafetyService.scan_for_emergencies(text)
+        is_em, reasons, _hits = SafetyService.scan_for_emergencies(text)
 
         if expected and not is_em:
             false_negatives.append((case["id"], text, case.get("category")))

@@ -147,7 +147,7 @@ def run_interactive_demo() -> None:
     time.sleep(1)
 
     console.print("\n[bold yellow]═══ STEP 2: SAFETY TRIPWIRE SCREENING ═══[/bold yellow]")
-    is_emergency, emergency_reasons = vlm.scan_safety_tripwires(patient_transcript)
+    is_emergency, _emergency_reasons = vlm.scan_safety_tripwires(patient_transcript)
     if is_emergency:
         console.print("[bold red]🚨 RED FLAG TRIPPED - HALTING FLOW[/bold red]")
     else:
@@ -163,7 +163,7 @@ def run_interactive_demo() -> None:
     )
     time.sleep(1.5)
 
-    dossier, hindi_summary, is_emergency, emergency_reasons = vlm.analyze_case(
+    dossier, hindi_summary, is_emergency, _emergency_reasons = vlm.analyze_case(
         session_id=session_id,
         patient_id=patient_id,
         patient_name=patient_name,
@@ -359,7 +359,7 @@ def run_interactive_demo() -> None:
     emergency_text = "मरीज को अचानक सीने में बहुत तेज दर्द हो रहा है और सांस लेने में भारी तकलीफ है।"
     console.print(f'[bold cyan]Patient Input:[/bold cyan] [italic]"{emergency_text}"[/italic]')
 
-    em_dossier, em_summary, em_is_emergency, em_reasons = vlm.analyze_case(
+    _em_dossier, _em_summary, em_is_emergency, em_reasons = vlm.analyze_case(
         session_id="session_emergency_test",
         patient_id="PAT-EM-001",
         patient_name="आपातकालीन मरीज (Emergency Patient)",

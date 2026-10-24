@@ -22,7 +22,7 @@ class SwarmResolver(Resolver):
         fallback: Resolver | None = None,
     ):
         self._routes: dict[str, str] = routes or {}
-        self._fallback: Resolver = fallback or GlobalResolver()
+        self._fallback: Resolver | None = fallback
 
     def update_routes(self, routes: dict[str, str]) -> None:
         self._routes.update(routes)
@@ -33,7 +33,10 @@ class SwarmResolver(Resolver):
             endpoints = [endpoint] if isinstance(endpoint, str) else list(endpoint)
             return destination, endpoints
 
-        # Fallback to Global Almanac Resolver for external ASI:One users
+        # Lazy fallback to Global Almanac Resolver for external ASI:One users
+        if self._fallback is None:
+            self._fallback = GlobalResolver()
+
         return await self._fallback.resolve(destination)
 
 

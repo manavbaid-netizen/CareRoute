@@ -122,12 +122,11 @@ def parse_urgency(val: Any) -> TriageUrgency:
     str_val = str(val).lower()
     if "emergency" in str_val or "critical" in str_val or "108" in str_val:
         return TriageUrgency.EMERGENCY
-    elif "high" in str_val or "urgent" in str_val:
+    if "high" in str_val or "urgent" in str_val:
         return TriageUrgency.HIGH
-    elif "moderate" in str_val or "priority" in str_val:
+    if "moderate" in str_val or "priority" in str_val:
         return TriageUrgency.MODERATE
-    else:
-        return TriageUrgency.LOW
+    return TriageUrgency.LOW
 
 
 class LLMClient:
@@ -366,7 +365,7 @@ class LLMClient:
         patient_name: str,
         text_transcript: str,
         image_data: str | None = None,
-        image_type: str | None = None,
+        _image_type: str | None = None,
     ) -> tuple[ClinicalDossier, str, bool, list[str]] | None:
         """Call Google Gemini with structured prompt and validation."""
         user_prompt = (
@@ -534,7 +533,7 @@ class LLMClient:
                 "कृपया अस्पताल में डॉक्टर से जांच कराएं।"
             )
             if has_vision:
-                raw_summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"
+                raw_summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"  # noqa: RUF001
 
             hindi_summary = f"{raw_summary}\n\n{CLINICAL_DISCLAIMER_HI}"
             return dossier, hindi_summary
@@ -559,7 +558,7 @@ class LLMClient:
             )
             dossier.engine = "deterministic_fallback"
             if image_data:
-                summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"
+                summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"  # noqa: RUF001
             return dossier, summary, is_em, reasons
 
         # Inline minimal safe fallback if fallback_engine is not linked
@@ -611,7 +610,7 @@ class LLMClient:
             "डॉक्टर के लिए सारांश तैयार किया है। कृपया ओपीडी में डॉक्टर से मिलें।"
         )
         if image_data:
-            summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"
+            summary += f"\nℹ️ {HONEST_VISION_NOTE_HI}"  # noqa: RUF001
         summary += f"\n\n{CLINICAL_DISCLAIMER_HI}"
         return dossier, summary, False, []
 

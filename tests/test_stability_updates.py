@@ -197,7 +197,7 @@ def test_vlm_escalates_acute_cough_with_breathlessness():
     vlm = VLMService()
     text = "मुझे 4 दिन से खांसी हो रही है और सांस लेने में दिक्कत और दम घुट रहा है।"
 
-    dossier, summary, is_em, _ = vlm.analyze_case(
+    dossier, summary, _is_em, _ = vlm.analyze_case(
         session_id="test_resp_escalate",
         patient_id="PAT_RESP_01",
         patient_name="Kavita",
@@ -220,7 +220,7 @@ def test_vlm_routine_cough_without_distress_remains_low_urgency():
     # 2 days of mild cough without fever, without breathlessness
     text = "मुझे 2 दिन से हल्की खांसी है, सांस बिल्कुल ठीक है और कोई बुखार नहीं है।"
 
-    dossier, summary, is_em, _ = vlm.analyze_case(
+    dossier, _summary, is_em, _ = vlm.analyze_case(
         session_id="test_mild_cough",
         patient_id="PAT_MILD",
         patient_name="Sunil",

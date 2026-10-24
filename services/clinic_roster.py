@@ -33,16 +33,15 @@ def map_specialty(target_specialty: str) -> tuple[Specialty, str]:
     low = (target_specialty or "").lower()
     if any(k in low for k in ("pulmon", "chest", "respirat", "tb", "फेफड़ा", "छाती")):
         return Specialty.PULMONOLOGY, "pulmonology"
-    elif any(k in low for k in ("derm", "skin", "fungal", "त्वचा", "चर्म")):
+    if any(k in low for k in ("derm", "skin", "fungal", "त्वचा", "चर्म")):
         return Specialty.DERMATOLOGY, "dermatology"
-    elif any(k in low for k in ("pediatric", "child", "बच्चा", "शिशु")):
+    if any(k in low for k in ("pediatric", "child", "बच्चा", "शिशु")):
         return Specialty.PEDIATRICS, "pediatrics"
-    elif any(k in low for k in ("ortho", "bone", "joint", "हड्डी", "घुटने", "कमर")):
+    if any(k in low for k in ("ortho", "bone", "joint", "हड्डी", "घुटने", "कमर")):
         return Specialty.ORTHOPEDICS, "orthopedics"
-    elif any(k in low for k in ("gyn", "obstetric", "pregnancy", "महिला", "गर्भावस्था")):
+    if any(k in low for k in ("gyn", "obstetric", "pregnancy", "महिला", "गर्भावस्था")):
         return Specialty.OBGYN, "obgyn"
-    else:
-        return Specialty.GENERAL_MEDICINE, "general"
+    return Specialty.GENERAL_MEDICINE, "general"
 
 
 class ClinicRosterService:
@@ -67,8 +66,7 @@ class ClinicRosterService:
             if path.exists():
                 try:
                     with open(path, encoding="utf-8") as f:
-                        data = json.load(f)
-                        return data
+                        return json.load(f)
                 except Exception as e:
                     logger.warning(f"Could not load roster from {path}: {e}")
 
@@ -556,6 +554,7 @@ class ClinicRosterService:
 
     def cancel_escrow(self, ticket_id: str, reason: str = "expired") -> bool:
         """Atomic cancellation of pending escrow deposit."""
+        logger.info(f"Cancelling pending escrow for {ticket_id} (Reason: {reason})")
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(

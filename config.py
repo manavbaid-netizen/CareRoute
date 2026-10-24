@@ -4,6 +4,7 @@ import builtins
 import os
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 from dotenv import load_dotenv
 
@@ -119,7 +120,7 @@ class Config(metaclass=ConfigMeta):
 
     # Clinic Authentication & Anti-Fraud Security
     DEFAULT_CLINIC_ID: str = os.getenv("DEFAULT_CLINIC_ID", "chc_alwar_01")
-    CLINIC_DESK_ADDRESSES: list[str] = [
+    CLINIC_DESK_ADDRESSES: ClassVar[list[str]] = [
         addr.strip()
         for addr in os.getenv(
             "CLINIC_DESK_ADDRESSES",

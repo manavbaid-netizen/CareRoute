@@ -293,7 +293,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> No
             return
 
         # B) End Session
-        elif isinstance(item, EndSessionContent) or getattr(item, "type", None) in (
+        if isinstance(item, EndSessionContent) or getattr(item, "type", None) in (
             "end-session",
             "end_session",
         ):
@@ -304,7 +304,7 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> No
             return
 
         # C) Text Input
-        elif isinstance(item, TextContent) or getattr(item, "type", None) == "text":
+        if isinstance(item, TextContent) or getattr(item, "type", None) == "text":
             user_text = item.text.strip()
             await process_text_narrative(ctx, sender, session, user_text)
             return

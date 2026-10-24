@@ -78,7 +78,7 @@ def vlm():
 def test_10_unrelated_symptoms_do_not_trigger_tb(vlm):
     """Assert 10 unrelated symptoms never trigger a TB workup or default to Pulmonology."""
     for case in UNRELATED_SYMPTOM_TEST_CASES:
-        dossier, summary, is_em, reasons = vlm.analyze_case(
+        dossier, _summary, is_em, _reasons = vlm.analyze_case(
             session_id=f"test_{case['id']}",
             patient_id="PAT_TEST",
             patient_name="Test Patient",
@@ -153,7 +153,7 @@ def test_real_tb_suspect_criteria_accuracy(vlm):
     """TB suspect classification strictly requires prolonged cough (>= 2 weeks) AND constitutional B-symptoms."""
     # Real TB suspect case
     tb_text = "नमस्ते डॉक्टर साहब, मुझे दो हफ्ते से शाम को हल्का बुखार आ रहा है, बलगम वाली खांसी है और 3 किलो वजन घट गया है।"
-    dossier, summary, is_em, _ = vlm.analyze_case(
+    dossier, _summary, is_em, _ = vlm.analyze_case(
         session_id="tb_real",
         patient_id="PAT_TB",
         patient_name="Ram Kumar",

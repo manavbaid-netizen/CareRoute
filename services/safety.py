@@ -225,10 +225,8 @@ def normalize_text(text: str) -> str:
     """Normalize unicode characters, accents, and spacing."""
     if not text:
         return ""
-    norm = unicodedata.normalize("NFKC", text)
-    norm = norm.lower()
-    norm = re.sub(r"\s+", " ", norm).strip()
-    return norm
+    norm = unicodedata.normalize("NFKC", text).lower()
+    return re.sub(r"\s+", " ", norm).strip()
 
 
 def is_negated(text: str, match_start: int, match_end: int) -> bool:
@@ -247,16 +245,11 @@ def is_negated(text: str, match_start: int, match_end: int) -> bool:
     post_clause = post_raw[: delim_post.start()] if delim_post else post_raw[:35]
 
     # Check English/prefix negations (e.g., "no chest pain", "denies breathlessness")
-    for np in NEGATION_PREFIXES:
-        if re.search(np, pre_clause, re.IGNORECASE):
-            return True
+    if any(re.search(np, pre_clause, re.IGNORECASE) for np in NEGATION_PREFIXES):
+        return True
 
     # Check suffix negations (e.g., "सीने में दर्द नहीं है", "dard nahi hai", "nahi hui hai")
-    for ns in NEGATION_SUFFIXES:
-        if re.search(ns, post_clause, re.IGNORECASE):
-            return True
-
-    return False
+    return any(re.search(ns, post_clause, re.IGNORECASE) for ns in NEGATION_SUFFIXES)
 
 
 class SafetyService:

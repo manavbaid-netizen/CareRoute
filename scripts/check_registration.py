@@ -39,10 +39,9 @@ def check_agentverse_almanac(address: str, base_url: str = "https://agentverse.a
         resp = requests.get(endpoint, timeout=5)
         if resp.status_code == 200:
             return resp.json()
-        elif resp.status_code == 404:
+        if resp.status_code == 404:
             return None
-        else:
-            return {"status_code": resp.status_code, "text": resp.text}
+        return {"status_code": resp.status_code, "text": resp.text}
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -104,7 +103,7 @@ def main() -> None:
             )
         else:
             console.print(
-                "[cyan]ℹ️ Agent is currently in LOCAL ENDPOINT mode (USE_AGENTVERSE=false).[/cyan]"
+                "[cyan]ℹ️ Agent is currently in LOCAL ENDPOINT mode (USE_AGENTVERSE=false).[/cyan]"  # noqa: RUF001
             )
             console.print(
                 "[dim]To enable Agentverse mailbox discovery for ASI:One, set USE_AGENTVERSE=true and add your AGENTVERSE_API_KEY in .env.[/dim]"

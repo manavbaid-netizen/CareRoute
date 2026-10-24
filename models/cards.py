@@ -102,19 +102,19 @@ def card_to_markdown(card: dict[str, Any]) -> str:
         sec_title = sec.get("title")
         if sec_title:
             lines.append(f"**{sec_title}**")
-        if "highlight" in sec and sec["highlight"]:
+        if sec.get("highlight"):
             lines.append(f"👉 **{sec['highlight']}**")
-        if "subtitle" in sec and sec["subtitle"]:
+        if sec.get("subtitle"):
             lines.append(f"_{sec['subtitle']}_")
-        if "content" in sec and sec["content"]:
+        if sec.get("content"):
             lines.append(sec["content"])
-        if "items" in sec and sec["items"]:
+        if sec.get("items"):
             for item in sec["items"]:
                 lines.append(f"• {item}")
-        if "facts" in sec and sec["facts"]:
+        if sec.get("facts"):
             for fact in sec["facts"]:
                 lines.append(f"• **{fact['label']}:** {fact['value']}")
-        if "qr_payload" in sec and sec["qr_payload"]:
+        if sec.get("qr_payload"):
             lines.append(f"\n🔐 **चेक-इन टोकन (Check-in Token):** `{sec['qr_payload']}`")
         lines.append("")
 

@@ -135,7 +135,20 @@ def _get_dispatcher_endpoint() -> str | None:
     return None
 
 
+def _is_test_env() -> bool:
+    import os
+    import sys
+
+    return (
+        "pytest" in sys.modules
+        or "PYTEST_CURRENT_TEST" in os.environ
+        or os.getenv("CAREROUTE_TEST_MODE") == "1"
+    )
+
+
 def _get_dispatcher_mailbox() -> bool:
+    if _is_test_env():
+        return False
     # When a public endpoint is configured, mailbox polling is disabled
     if Config.AGENT_ENDPOINT:
         return False
@@ -150,7 +163,9 @@ dispatcher = Agent(
     endpoint=_get_dispatcher_endpoint(),
     mailbox=_get_dispatcher_mailbox(),
     resolve=make_swarm_resolver(),
-    publish_agent_details=Config.USE_AGENTVERSE or bool(Config.AGENT_ENDPOINT),
+    publish_agent_details=(
+        False if _is_test_env() else (Config.USE_AGENTVERSE or bool(Config.AGENT_ENDPOINT))
+    ),
     readme_path="agentverse_readme.md",
 )
 
@@ -240,7 +255,7 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             return
 
         # (B) End of session
-        elif isinstance(item, EndSessionContent) or getattr(item, "type", None) in (
+        if isinstance(item, EndSessionContent) or getattr(item, "type", None) in (
             "end-session",
             "end_session",
         ):
@@ -251,7 +266,7 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             return
 
         # (C) Resource content (images, prescriptions, photos)
-        elif isinstance(item, ResourceContent) or getattr(item, "type", None) == "resource":
+        if isinstance(item, ResourceContent) or getattr(item, "type", None) == "resource":
             resource = item.resource if not isinstance(item.resource, list) else item.resource[0]
             uri = getattr(resource, "uri", "")
             if is_worker_online(Config.DIAGNOSTIC_PORT) and WORKER_ADDRESSES.get("diagnostic"):
@@ -287,21 +302,20 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             return
 
         # (D) TextContent
-        elif isinstance(item, TextContent) or getattr(item, "type", None) == "text":
+        if isinstance(item, TextContent) or getattr(item, "type", None) == "text":
             user_text = item.text.strip()
             await _process_user_text(ctx, sender, session, user_text)
             return
 
         # (E) Stream control markers from ASI:One (silently handled)
-        elif (
+        if (
             getattr(item, "type", None) in ("end-stream", "end_stream")
             or "EndStream" in str(type(item))
             or "endstream" in str(type(item)).lower()
         ):
             continue
 
-        else:
-            ctx.logger.warning(f"Ignoring unrecognized ACP content item: {type(item)}")
+        ctx.logger.warning(f"Ignoring unrecognized ACP content item: {type(item)}")
 
 
 @chat_proto.on_message(model=ChatAcknowledgement)
@@ -613,7 +627,7 @@ async def _process_user_text(
                 await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
             return
 
-        elif action == "select_slot":
+        if action == "select_slot":
             slot_id = action_data.get("slot_id")
             session["selected_slot"] = action_data
             session["state"] = "STATE_PAYMENT_PENDING"
@@ -656,7 +670,7 @@ async def _process_user_text(
                 )
             return
 
-        elif action == "clinic_checkin":
+        if action == "clinic_checkin":
             ticket_id = action_data.get("ticket_id")
             qr_token = action_data.get("qr_token")
             if WORKER_ADDRESSES["escrow"] and ticket_id:
@@ -672,7 +686,7 @@ async def _process_user_text(
                 )
             return
 
-        elif (
+        if (
             action == "numeric_choice"
             and session["state"] == "STATE_SLOT_SELECTED"
             and session.get("available_slots")
@@ -824,7 +838,7 @@ async def _process_user_text(
 
 
 @dispatcher.on_message(model=TriageAnalysisResponse)
-async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisResponse) -> None:
+async def handle_triage_response(ctx: Context, _sender: str, msg: TriageAnalysisResponse) -> None:
     """
     Handle clinical triage result from DiagnosticWorkerAgent.
     Dispatches user-facing ACP message with Hindi summary and interactive triage card.
@@ -872,7 +886,7 @@ async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisR
 
 
 @dispatcher.on_message(model=SlotQueryResponse)
-async def handle_slot_response(ctx: Context, sender: str, msg: SlotQueryResponse) -> None:
+async def handle_slot_response(ctx: Context, _sender: str, msg: SlotQueryResponse) -> None:
     """
     Handle available OPD slots returned from LogisticsWorkerAgent.
     Dispatches user-facing ACP message with slot picker card.
@@ -902,7 +916,7 @@ async def handle_slot_response(ctx: Context, sender: str, msg: SlotQueryResponse
 
 @dispatcher.on_message(model=BookingCommitResponse)
 async def handle_booking_commit_response(
-    ctx: Context, sender: str, msg: BookingCommitResponse
+    ctx: Context, _sender: str, msg: BookingCommitResponse
 ) -> None:
     """
     Handle booking confirmation from LogisticsWorkerAgent.
@@ -949,7 +963,7 @@ async def handle_booking_commit_response(
 
 
 @dispatcher.on_message(model=EscrowLockResponse)
-async def handle_escrow_lock_response(ctx: Context, sender: str, msg: EscrowLockResponse) -> None:
+async def handle_escrow_lock_response(ctx: Context, _sender: str, msg: EscrowLockResponse) -> None:
     """
     Handle escrow deposit lock confirmation from EscrowWorkerAgent.
     Dispatches final Booking Receipt with QR payload to patient.
@@ -988,7 +1002,7 @@ async def handle_escrow_lock_response(ctx: Context, sender: str, msg: EscrowLock
 
 @dispatcher.on_message(model=EscrowReleaseResponse)
 async def handle_escrow_release_response(
-    ctx: Context, sender: str, msg: EscrowReleaseResponse
+    ctx: Context, _sender: str, msg: EscrowReleaseResponse
 ) -> None:
     """
     Handle clinic desk QR check-in refund confirmation.
@@ -1091,7 +1105,7 @@ async def request_timeout_watchdog(ctx: Context) -> None:
                 transcript = pending.get("text_transcript")
                 if req_type == "triage" and transcript:
                     try:
-                        dossier, hindi_summary, is_emergency, emergency_reasons = (
+                        dossier, hindi_summary, _is_emergency, _emergency_reasons = (
                             vlm_service.analyze_case(
                                 session_id=user_addr,
                                 patient_id=session.get("patient_id", "P-101"),

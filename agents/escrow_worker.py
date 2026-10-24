@@ -67,7 +67,7 @@ def create_payment_request(
 
 
 def verify_testnet_tx(
-    tx_hash: str, expected_recipient: str, expected_amount: float
+    tx_hash: str, _expected_recipient: str = "", _expected_amount: float = 0.0
 ) -> tuple[bool, str]:
     """Verify transaction on Fetch.ai Dorado Testnet RPC."""
     import json

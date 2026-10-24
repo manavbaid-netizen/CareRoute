@@ -4,6 +4,7 @@ import datetime
 import logging
 import re
 import uuid
+from typing import ClassVar
 
 from config import Config
 from models.clinical_schemas import (
@@ -30,7 +31,7 @@ CLINICAL_DISCLAIMER_EN = (
     "It does not provide medical diagnoses or prescriptions. An in-person consultation is required."
 )
 
-__all__ = ["VLMService", "extract_clean_json", "CLINICAL_DISCLAIMER_HI", "CLINICAL_DISCLAIMER_EN"]
+__all__ = ["CLINICAL_DISCLAIMER_EN", "CLINICAL_DISCLAIMER_HI", "VLMService", "extract_clean_json"]
 
 
 class VLMService:
@@ -42,7 +43,7 @@ class VLMService:
     """
 
     # Critical life-threatening tripwire keywords
-    RED_FLAGS = {
+    RED_FLAGS: ClassVar[dict[str, list[str]]] = {
         "chest_pain": [
             "सीने में तेज दर्द",
             "छाती में भारीपन",
@@ -233,7 +234,11 @@ class VLMService:
             )
 
         # Check patient demographics
-        if not patient_name or patient_name in ("Patient", "Guest", "Unknown", "User"):
+        if (
+            not patient_name
+            or patient_name in ("Patient", "Guest", "Unknown", "User")
+            or patient_age is None
+        ):
             questions.append(
                 {
                     "field": "patient_name",
@@ -263,7 +268,7 @@ class VLMService:
         patient_id: str,
         patient_name: str,
         text_transcript: str,
-        image_data: str | None = None,
+        _image_data: str | None = None,
         image_type: str | None = None,
     ) -> tuple[ClinicalDossier, str, bool, list[str]]:
         """

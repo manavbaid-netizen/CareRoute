@@ -30,7 +30,7 @@ class TestCareRouteClinicalSystem(unittest.TestCase):
         self.assertTrue(is_em)
         self.assertGreaterEqual(len(reasons), 1)
 
-        dossier, summary, is_em2, reasons2 = self.vlm.analyze_case(
+        dossier, _summary, is_em2, _reasons2 = self.vlm.analyze_case(
             session_id="test_em",
             patient_id="PAT_TEST",
             patient_name="Test Patient",
@@ -41,7 +41,7 @@ class TestCareRouteClinicalSystem(unittest.TestCase):
 
     def test_respiratory_tb_triage(self):
         text = "दो हफ्ते से शाम को बुखार, खांसी और वजन घट रहा है"
-        dossier, summary, is_em, reasons = self.vlm.analyze_case(
+        dossier, _summary, is_em, _reasons = self.vlm.analyze_case(
             session_id="test_tb",
             patient_id="PAT_TB",
             patient_name="Ram Kumar",
@@ -55,7 +55,7 @@ class TestCareRouteClinicalSystem(unittest.TestCase):
 
     def test_dermatology_triage(self):
         text = "हाथ पर गोल चकत्ते हैं और बहुत तेज खुजली हो रही है"
-        dossier, summary, is_em, reasons = self.vlm.analyze_case(
+        dossier, _summary, is_em, _reasons = self.vlm.analyze_case(
             session_id="test_derm",
             patient_id="PAT_DERM",
             patient_name="Shanti Devi",

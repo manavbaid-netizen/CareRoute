@@ -101,7 +101,7 @@ async def test_commit_payment_valid_flow(roster):
 
 
 @pytest.mark.anyio
-async def test_commit_payment_insufficient_amount_rejected(roster):
+async def test_commit_payment_insufficient_amount_rejected():
     """Verify CommitPayment with insufficient amount (< 0.5 FET) is cancelled."""
     ticket_id = "CR-TEST-INSUFFICIENT-02"
     ctx = MagicMock()
