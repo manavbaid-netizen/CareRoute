@@ -744,9 +744,14 @@ async def _process_user_text(
     if session["state"] == "STATE_SLOT_SELECTED" and session.get("available_slots"):
         slots = session["available_slots"]
         choice_idx = None
-        if user_text.isdigit() and 1 <= int(user_text) <= len(slots):
-            choice_idx = int(user_text) - 1
-        else:
+
+        fallback_action = parse_card_action(user_text)
+        if fallback_action and fallback_action.get("action") == "numeric_choice":
+            c_num = fallback_action.get("choice", 1)
+            if 1 <= c_num <= len(slots):
+                choice_idx = c_num - 1
+
+        if choice_idx is None:
             for i, s in enumerate(slots):
                 if s.get("slot_id") == user_text or s.get("time", "").lower() in user_text.lower():
                     choice_idx = i

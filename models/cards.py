@@ -137,24 +137,79 @@ def parse_card_action(user_text: str) -> dict[str, Any] | None:
     """
     Parse an incoming client message to determine if it is an interactive
     card action payload (JSON from a button tap) or a numeric text selection.
+    Supports English & Hindi natural phrasings ('slot 1', 'option 2', 'first', 'पहला').
     """
-    cleaned = user_text.strip()
+    cleaned = user_text.strip().lower()
     if not cleaned:
         return None
 
     # 1. Native JSON action payload from button click
     if cleaned.startswith("{") and cleaned.endswith("}"):
         try:
-            parsed = json.loads(cleaned)
+            parsed = json.loads(user_text.strip())
             if isinstance(parsed, dict) and "action" in parsed:
                 return parsed
         except Exception:
             pass
 
-    # 2. Check for numeric choice (e.g. "1", "2", "#1")
-    num_match = re.match(r"^#?(\d+)$", cleaned)
+    # Guard: do not treat clinical descriptions like 'fever for 3 days' as an action
+    if any(
+        k in cleaned
+        for k in [
+            "day",
+            "days",
+            "din",
+            "week",
+            "weeks",
+            "hafte",
+            "month",
+            "fever",
+            "pain",
+            "dard",
+            "cough",
+            "khansi",
+        ]
+    ):
+        return None
+
+    # 2. Check for numeric choice (e.g. '1', '2', '#1', '[1]', '1.')
+    num_match = re.match(r"^#?\[?(\d+)\]?\.?$", cleaned)
     if num_match:
         return {"action": "numeric_choice", "choice": int(num_match.group(1))}
+
+    # 3. Check for natural phrases like 'slot 1', 'option 2', 'choice 3', 'no. 1'
+    phrase_match = re.search(
+        r"(?:slot|opt|option|choice|number|no|स्लॉट|नंबर|विकल्प)\s*[:\-#]?\s*\[?([1-9])\]?\.?",
+        cleaned,
+    )
+    if phrase_match and len(cleaned.split()) <= 4:
+        return {"action": "numeric_choice", "choice": int(phrase_match.group(1))}
+
+    # 4. Words for 1, 2, 3 in English and Hindi
+    word_map = {
+        "one": 1,
+        "first": 1,
+        "1st": 1,
+        "two": 2,
+        "second": 2,
+        "2nd": 2,
+        "three": 3,
+        "third": 3,
+        "3rd": 3,
+        "four": 4,
+        "fourth": 4,
+        "4th": 4,
+        "एक": 1,
+        "पहला": 1,
+        "दो": 2,
+        "दूसरा": 2,
+        "तीन": 3,
+        "तीसरा": 3,
+    }
+    for word, num in word_map.items():
+        if (word in cleaned) if not word.isascii() else bool(re.search(rf"\b{word}\b", cleaned)):
+            if len(cleaned.split()) <= 3:
+                return {"action": "numeric_choice", "choice": num}
 
     return None
 
