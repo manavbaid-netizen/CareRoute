@@ -136,7 +136,7 @@ class GeoService:
         self,
         cache_dir: Path | None = None,
         cache_ttl_hours: int = 24,
-        request_timeout: float = 2.5,
+        request_timeout: float = 1.0,
     ) -> None:
         self.cache_dir = cache_dir or (Config.DATA_STORAGE_DIR / "cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)

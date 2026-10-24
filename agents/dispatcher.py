@@ -40,9 +40,12 @@ from models.chat_models import (
     create_ack,
     create_text_chat,
 )
+from services.clinic_roster import ClinicRosterService
+from services.dossier_generator import DossierGeneratorService
 from services.geo_service import GeoService
 from services.session_store import SessionStore
 from services.swarm_resolver import make_swarm_resolver
+from services.vlm_service import VLMService
 
 # CORS & Chromium Private Network Access handler for Agentverse Local Inspector
 _orig_asgi_send = ASGIServer._asgi_send
@@ -96,6 +99,9 @@ logger = logging.getLogger("CareRoute.Dispatcher")
 # Session store backed by SQLite
 session_store = SessionStore()
 geo_service = GeoService()
+vlm_service = VLMService()
+dossier_service = DossierGeneratorService()
+roster_service = ClinicRosterService()
 
 # Security & Traffic Controls
 MAX_INPUT_LENGTH = 1500
@@ -257,8 +263,10 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             return
 
         # (E) Stream control markers from ASI:One (silently handled)
-        elif getattr(item, "type", None) in ("end-stream", "end_stream") or "EndStream" in str(
-            type(item)
+        elif (
+            getattr(item, "type", None) in ("end-stream", "end_stream")
+            or "EndStream" in str(type(item))
+            or "endstream" in str(type(item)).lower()
         ):
             continue
 
@@ -350,8 +358,21 @@ async def _process_user_text(
         "आसपास का अस्पताल",
         "हॉस्पिटल कहाँ है",
     ]
-    is_hospital_inquiry = any(p in user_text.lower() for p in hospital_inquiry_phrases) or (
-        user_text.lower().strip() in ("अस्पताल", "hospital", "chc", "निकटतम chc", "हॉस्पिटल")
+    is_complaint_or_long = len(user_text.split()) > 10 or any(
+        neg in user_text
+        for neg in [
+            "पहले भी",
+            "तीसरी बार",
+            "मत भेजो",
+            "नहीं चाहिए",
+            "कोई नया",
+            "यही सूची",
+            "बार आई",
+        ]
+    )
+    is_hospital_inquiry = not is_complaint_or_long and (
+        any(p in user_text.lower() for p in hospital_inquiry_phrases)
+        or (user_text.lower().strip() in ("अस्पताल", "hospital", "chc", "निकटतम chc", "हॉस्पिटल"))
     )
     if is_hospital_inquiry:
         facilities = geo_service.find_nearest_chc(max_results=3)
@@ -787,7 +808,8 @@ async def handle_escrow_release_response(
 async def request_timeout_watchdog(ctx: Context) -> None:
     """
     Periodic watchdog checking for worker IPC request timeouts.
-    Retries once, then notifies patient gracefully in Hindi.
+    Retries once, then gracefully delivers clinical assessment and next steps in Hindi
+    via resilient in-process service execution so the user never gets an error deadlock.
     """
     now = time.time()
     for user_addr, session in list(session_store._cache.items()):
@@ -800,7 +822,7 @@ async def request_timeout_watchdog(ctx: Context) -> None:
         cid = pending.get("correlation_id", "none")
         req_type = pending.get("type", "")
 
-        if elapsed > 8.0:  # 8 seconds timeout
+        if elapsed > 5.0:  # 5 seconds timeout per attempt
             retries = pending.get("retries", 0)
             if retries < 1:
                 pending["retries"] = retries + 1
@@ -846,14 +868,100 @@ async def request_timeout_watchdog(ctx: Context) -> None:
                         ),
                     )
             else:
-                # Failed after retry -> graceful degradation
+                # Failed after retry -> graceful degradation with in-process self-healing
                 session["pending_request"] = None
-                session_store.save_session(user_addr, session)
-                timeout_msg = (
+                ctx.logger.warning(
+                    f"⏱️ [CID: {cid}] Worker IPC request failed after retry for {user_addr} (type: {req_type}). "
+                    f"Activating resilient in-process service execution..."
+                )
+                base_timeout_msg = (
                     "⚠️ स्वास्थ्य केंद्र सर्वर से संपर्क करने में अधिक समय लग रहा है। "
                     "कृपया कुछ क्षण बाद पुनः प्रयास करें या सीधे 108 एम्बुलेंस / नजदीकी CHC पर संपर्क करें।"
                 )
-                await ctx.send(user_addr, create_text_chat(timeout_msg))
+
+                transcript = pending.get("text_transcript")
+                if req_type == "triage" and transcript:
+                    try:
+                        dossier, hindi_summary, is_emergency, emergency_reasons = (
+                            vlm_service.analyze_case(
+                                session_id=user_addr,
+                                patient_id=session.get("patient_id", "P-101"),
+                                patient_name=session.get("patient_name", "अनाम मरीज"),
+                                text_transcript=transcript,
+                                image_data=pending.get("image_data"),
+                                image_type=pending.get("image_type"),
+                            )
+                        )
+                        dossier_service.save_dossier(dossier)
+                        session["dossier"] = dossier
+                        session["dossier_id"] = dossier.dossier_id
+                        assessment = getattr(dossier, "assessment", None)
+                        specialty_en = getattr(
+                            assessment, "recommended_specialty", "General Medicine"
+                        )
+                        session["recommended_specialty"] = specialty_en
+                        session["state"] = "STATE_TRIAGE_PRESENTED"
+                        base_timeout_msg += (
+                            f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
+                            f"🩺 **स्थानीय प्राथमिक विश्लेषण (Preliminary Assessment):**\n\n"
+                            f"{hindi_summary}\n\n"
+                            f"👉 डॉक्टर से परामर्श के लिए **'स्लॉट'** या **'1'** लिखकर भेजें।"
+                        )
+                    except Exception as fb_exc:
+                        ctx.logger.error(f"In-process triage fallback error: {fb_exc}")
+
+                elif req_type == "slots":
+                    try:
+                        specialty = pending.get("specialty") or session.get(
+                            "recommended_specialty", "General Medicine"
+                        )
+                        result = roster_service.get_available_slots(specialty)
+                        session["available_slots"] = result["slots"]
+                        session["state"] = "STATE_SLOT_SELECTED"
+                        slots_text = "\n".join(
+                            f"• {i + 1}. समय: {s['time']} ({result['doctor_name']}, {result['room_no']})"
+                            for i, s in enumerate(result["slots"])
+                        )
+                        base_timeout_msg += (
+                            f"\n\n━━━━━━━━━━━━━━━━━━━━\n"
+                            f"📅 **उपलब्ध ओपीडी स्लॉट ({result['clinic_name']}):**\n\n"
+                            f"{slots_text}\n\n"
+                            f"👉 बुक करने के लिए स्लॉट नंबर (जैसे **'1'**) लिखकर भेजें।"
+                        )
+                    except Exception as fb_exc:
+                        ctx.logger.error(f"In-process slot fallback error: {fb_exc}")
+
+                elif req_type in ("booking", "escrow"):
+                    try:
+                        slot_id = pending.get("slot_id") or "slot_1"
+                        dossier_id = pending.get("dossier_id") or session.get(
+                            "dossier_id", "D-FALLBACK"
+                        )
+                        booking = roster_service.book_appointment(
+                            slot_id=slot_id,
+                            patient_id=session.get("patient_id", "P-101"),
+                            patient_name=session.get("patient_name", "अनाम मरीज"),
+                            dossier_id=dossier_id,
+                            user_address=user_addr,
+                        )
+                        if booking:
+                            session["booking_details"] = booking
+                            ticket_id = booking.get("ticket_id", "CR-TKT-101")
+                            session["ticket_id"] = ticket_id
+                            session["state"] = "STATE_CONFIRMED"
+                            base_timeout_msg = (
+                                f"🎉 **आपकी ओपीडी परामर्श बुकिंग सुरक्षित कर ली गई है!**\n\n"
+                                f"🎫 टोकन क्रमांक: `{ticket_id}`\n"
+                                f"👨‍⚕️ डॉक्टर: {booking['doctor_name']} ({booking['room_no']})\n"
+                                f"🕒 समय: {booking['slot_time']}\n"
+                                f"🏥 स्वास्थ्य केंद्र: {booking['clinic_name']}\n\n"
+                                f"*(स्वास्थ्य केंद्र पहुँचने पर यह टोकन काउंटर पर दिखाएं)*"
+                            )
+                    except Exception as fb_exc:
+                        ctx.logger.error(f"In-process booking fallback error: {fb_exc}")
+
+                session_store.save_session(user_addr, session)
+                await ctx.send(user_addr, create_text_chat(base_timeout_msg))
                 ctx.logger.error(
                     f"❌ [CID: {cid}] Worker IPC request failed after retry for {user_addr}"
                 )
