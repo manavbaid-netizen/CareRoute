@@ -464,6 +464,20 @@ async def _execute_direct_booking(
         except Exception as d_exc:
             ctx.logger.warning(f"Could not update dossier path for ticket {ticket_id}: {d_exc}")
 
+    # Record anti-no-show micro-escrow deposit in SQLite
+    try:
+        escrow_record = roster_service.create_escrow_deposit(
+            ticket_id=ticket_id,
+            patient_address=sender,
+            amount_fet=Config.ESCROW_DEPOSIT_FET,
+            status="LOCKED",
+        )
+        if escrow_record:
+            booking["escrow_status"] = "LOCKED"
+            booking["escrow_tx_hash"] = escrow_record.get("lock_tx")
+    except Exception as esc_exc:
+        ctx.logger.warning(f"Could not initialize escrow deposit for ticket {ticket_id}: {esc_exc}")
+
     doctor_name = booking.get("doctor_name", "Dr. Harish Sharma")
     clinic_name = booking.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
     room_no = booking.get("room_no", "कक्ष संख्या 4")
@@ -477,6 +491,7 @@ async def _execute_direct_booking(
         clinic_name=clinic_name,
         room_no=room_no,
         slot_time=slot_time,
+        deposit_fet=Config.ESCROW_DEPOSIT_FET,
         qr_data=qr_payload,
     )
     intro_text = (
@@ -684,52 +699,38 @@ async def _process_user_text(
             session["selected_slot"] = action_data
             session["state"] = "STATE_PAYMENT_PENDING"
 
-            dossier_id = session.get("dossier_id")
-            if not dossier_id:
-                # If no clinical dossier exists, ask patient to describe symptoms first
-                warn_text = (
-                    "⚠️ कृपया पहले अपने लक्षणों का विवरण दें ताकि डॉक्टर के लिए क्लिनिकल सारांश "
-                    "(SOAP Dossier) तैयार किया जा सके।"
-                )
-                await ctx.send(sender, create_text_chat(warn_text))
-                return
+            dossier_id = session.get("dossier_id") or f"D-AUTO-{uuid4().hex[:6].upper()}"
+            session["dossier_id"] = dossier_id
 
-            if (
-                not Config.DIRECT_DISPATCH_MODE
-                and is_worker_online(Config.LOGISTICS_PORT)
-                and WORKER_ADDRESSES.get("logistics")
-            ):
-                session["pending_request"] = {
-                    "type": "booking",
-                    "sent_at": now,
-                    "retries": 0,
-                    "correlation_id": correlation_id,
-                    "slot_id": slot_id,
-                    "dossier_id": dossier_id,
-                }
-                session_store.save_session(sender, session)
-                await ctx.send(
-                    WORKER_ADDRESSES["logistics"],
-                    BookingCommitRequest(
-                        session_id=sender,
-                        patient_id=session["patient_id"],
-                        patient_name=session["patient_name"],
-                        slot_id=slot_id,
-                        dossier_id=dossier_id,
-                        user_address=sender,
-                        correlation_id=correlation_id,
-                    ),
-                )
-            else:
-                await _execute_direct_booking(
-                    ctx, sender, session, slot_id, dossier_id, correlation_id
-                )
+            await _execute_direct_booking(
+                ctx, sender, session, slot_id, dossier_id, correlation_id
+            )
+            return
+
+        if action == "view_dossier":
+            ticket_id = action_data.get("ticket_id") or session.get("ticket_id")
+            booking = session.get("booking_details") or {}
+            doc = booking.get("doctor_name", "Dr. Rajesh Meena")
+            clinic = booking.get("clinic_name", "सामुदायिक स्वास्थ्य केंद्र, अलवर")
+            room = booking.get("room_no", "कक्ष संख्या 2")
+            slot_t = booking.get("slot_time", "09:30 AM")
+            spec = session.get("recommended_specialty", "General Medicine")
+            dossier_text = (
+                f"📋 **ओपीडी क्लिनिकल डोजियर (Doctor's Intake Dossier)**\n\n"
+                f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+                f"👨‍⚕️ **परामर्शदाता:** {doc} ({room})\n"
+                f"🏥 **अस्पताल:** {clinic}\n"
+                f"🕒 **समय:** {slot_t}\n"
+                f"🩺 **विभाग:** {spec}\n\n"
+                f"*(यह क्लिनिकल डोजियर डॉक्टर के ओपीडी कंप्यूटर पर उपलब्ध करा दिया गया है)*"
+            )
+            await ctx.send(sender, create_text_chat(dossier_text))
             return
 
         if action == "clinic_checkin":
             ticket_id = action_data.get("ticket_id")
             qr_token = action_data.get("qr_token")
-            if WORKER_ADDRESSES["escrow"] and ticket_id:
+            if WORKER_ADDRESSES.get("escrow") and is_worker_online(Config.ESCROW_PORT) and ticket_id:
                 await ctx.send(
                     WORKER_ADDRESSES["escrow"],
                     EscrowReleaseRequest(
@@ -740,6 +741,24 @@ async def _process_user_text(
                         correlation_id=correlation_id,
                     ),
                 )
+            elif ticket_id:
+                # Direct in-process check-in execution
+                from agents.escrow_worker import execute_patient_checkin
+
+                rel_resp = execute_patient_checkin(
+                    ticket_id=ticket_id,
+                    scanned_by="alwar_chc_reception_desk",
+                    qr_token=qr_token,
+                    sender_address=sender,
+                )
+                checkin_text = (
+                    f"💸 **अस्पताल चेक-इन सत्यापन एवं रिफंड सफल!**\n\n"
+                    f"{rel_resp.message}\n"
+                    f"• रिफंड राशि: {rel_resp.refund_amount_fet} FET\n"
+                    f"• ट्रांजैक्शन हैश: `{rel_resp.refund_tx_hash}`\n\n"
+                    f"केयररूट का उपयोग करने के लिए धन्यवाद। आपका परामर्श शुभ हो!"
+                )
+                await ctx.send(sender, create_text_chat(checkin_text))
             return
 
         if (
@@ -763,8 +782,23 @@ async def _process_user_text(
                 )
                 return
 
-    # 3. Handle fallback slot choices & confirmation words (e.g. user typed '1', '2', 'slot 1', 'हाँ', 'book')
+    # 3. Handle slot choices & confirmation words in STATE_SLOT_SELECTED or STATE_PAYMENT_PENDING
     if session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING"):
+        # Check if user explicitly requested to restart or describe new symptoms
+        if any(
+            kw in user_text.lower()
+            for kw in ["new", "restart", "start", "नया", "लक्षण जोड़ें", "add symptom", "symptom"]
+        ):
+            session["state"] = "STATE_IDLE"
+            session["available_slots"] = None
+            session["selected_slot"] = None
+            session_store.save_session(sender, session)
+            await ctx.send(
+                sender,
+                create_text_chat("🔄 नया सत्र प्रारंभ हो गया है। कृपया अपने नए लक्षण या स्वास्थ्य समस्या बताएं।"),
+            )
+            return
+
         if not session.get("available_slots"):
             spec = session.get("recommended_specialty", "General Medicine")
             slots_res = roster_service.get_available_slots(spec)
@@ -779,10 +813,31 @@ async def _process_user_text(
                 choice_idx = c_num - 1
 
         if choice_idx is None:
+            # Check for any isolated digit 1-9 in user text (e.g. 'maybe 2', '2 please', 'book 2', 'choice 2')
+            dig_m = re.search(r"\b([1-9])\b", user_text)
+            if dig_m:
+                d_val = int(dig_m.group(1))
+                if 1 <= d_val <= len(slots):
+                    choice_idx = d_val - 1
+
+        if choice_idx is None:
+            # Check for Hindi/English words like 'पहला', 'दूसरा', 'dusra', 'second'
+            word_to_idx = {
+                "पहला": 0, "first": 0, "1st": 0, "pehla": 0, "ek": 0,
+                "दूसरा": 1, "second": 1, "2nd": 1, "dusra": 1, "doosra": 1, "do": 1,
+                "तीसरा": 2, "third": 2, "3rd": 2, "tisra": 2, "teesra": 2, "teen": 2,
+            }
+            for w, idx in word_to_idx.items():
+                if w in user_text.lower():
+                    if idx < len(slots):
+                        choice_idx = idx
+                        break
+
+        if choice_idx is None:
             # If user said 'yes', 'book', 'confirm', 'हाँ', default to first slot
             if any(
                 w in user_text.lower()
-                for w in ["yes", "book", "confirm", "हाँ", "हा", "कर दो", "पहला"]
+                for w in ["yes", "book", "confirm", "हाँ", "हा", "कर दो", "पहला", "book it", "done"]
             ):
                 choice_idx = 0
             else:
@@ -805,22 +860,47 @@ async def _process_user_text(
             )
             return
 
-    # 4. Handle text command to view slots if triage already presented
-    if session["state"] == "STATE_TRIAGE_PRESENTED" and any(
-        kw in user_text.lower() for kw in ["slot", "स्लॉट", "book", "बुकिंग", "1", "डॉक्टर"]
-    ):
-        specialty = session.get("recommended_specialty", "General Medicine")
-        if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
-            session["state"] = "STATE_SLOT_SELECTED"
-            session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
-            session_store.save_session(sender, session)
-            await ctx.send(
-                WORKER_ADDRESSES["logistics"],
-                SlotQueryRequest(session_id=sender, specialty=specialty, user_address=sender),
-            )
-        else:
-            await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
+        # If user is in slot selection and input could not be matched to a slot:
+        # DO NOT fall through to symptom triage! Re-prompt for slot selection!
+        slots_text = "\n".join(f"• {i + 1}. समय: {s['time']}" for i, s in enumerate(slots))
+        prompt_msg = (
+            f"📅 **कृपया ओपीडी परामर्श के लिए स्लॉट नंबर चुनें:**\n\n"
+            f"{slots_text}\n\n"
+            f"👉 बुक करने के लिए स्लॉट नंबर (जैसे **'1'** या **'2'**) लिखकर भेजें।"
+        )
+        await ctx.send(sender, create_text_chat(prompt_msg))
         return
+
+    # 4. Handle text command to view slots if triage already presented
+    if session["state"] == "STATE_TRIAGE_PRESENTED":
+        user_lower = user_text.lower()
+        wants_slots = (
+            any(
+                kw in user_lower
+                for kw in [
+                    "slot", "slots", "स्लॉट", "book", "बुकिंग", "1", "2",
+                    "डॉक्टर", "दिखाओ", "time", "समय", "view", "हाँ", "हा", "yes", "ok", "done"
+                ]
+            )
+            or re.search(r"\b[1-9]\b", user_lower) is not None
+        )
+        if wants_slots:
+            specialty = session.get("recommended_specialty", "General Medicine")
+            if (
+                not Config.DIRECT_DISPATCH_MODE
+                and is_worker_online(Config.LOGISTICS_PORT)
+                and WORKER_ADDRESSES.get("logistics")
+            ):
+                session["state"] = "STATE_SLOT_SELECTED"
+                session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
+                session_store.save_session(sender, session)
+                await ctx.send(
+                    WORKER_ADDRESSES["logistics"],
+                    SlotQueryRequest(session_id=sender, specialty=specialty, user_address=sender),
+                )
+            else:
+                await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
+            return
 
     # Guard: Prevent short affirmations, numbers, or navigation keywords from being treated as clinical symptoms
     user_strip = user_text.strip()

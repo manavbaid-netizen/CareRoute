@@ -19,6 +19,11 @@ from services.safety import SafetyService
 from services.vlm_service import VLMService
 from services.vlm_service import extract_clean_json as vlm_extract_clean_json
 
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
 # ==============================================================================
 # 1. ROBUST LLM JSON STRIPPING TESTS
 # ==============================================================================
@@ -283,7 +288,7 @@ def test_session_store_persists_available_slots_and_specialty(tmp_path):
 
 @pytest.mark.anyio
 async def test_direct_booking_end_to_end():
-    """Verify _execute_direct_booking successfully transitions to STATE_CONFIRMED without TypeError."""
+    """Verify _execute_direct_booking successfully transitions to STATE_CONFIRMED and locks micro-escrow."""
     from unittest.mock import AsyncMock, MagicMock
 
     from agents.dispatcher import _execute_direct_booking, roster_service
@@ -313,4 +318,40 @@ async def test_direct_booking_end_to_end():
     assert session["state"] == "STATE_CONFIRMED"
     assert session.get("ticket_id") is not None
     assert mock_ctx.send.call_count == 1
+    # Verify micro-escrow locked in sqlite
+    escrow = roster_service.get_escrow(session["ticket_id"])
+    assert escrow is not None
+    assert escrow["status"] == "LOCKED"
+
+
+@pytest.mark.anyio
+async def test_maybe_2_slot_selection_flow():
+    """Verify conversational slot selection 'maybe 2' does not trigger symptom triage re-diagnosis."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from agents.dispatcher import _process_user_text, roster_service
+
+    roster_service.reset_slot("ALW_GEN_1100")
+    user = "agent1q_test_maybe_2_user"
+    session = {
+        "user_address": user,
+        "state": "STATE_SLOT_SELECTED",
+        "patient_id": "P-202",
+        "patient_name": "रमेश कुमार",
+        "available_slots": [
+            {"slot_id": "ALW_GEN_0930", "time": "09:30 AM"},
+            {"slot_id": "ALW_GEN_1100", "time": "11:00 AM"},
+        ],
+    }
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    await _process_user_text(mock_ctx, user, session, "maybe 2")
+
+    # Should book slot 2 ("ALW_GEN_1000") and transition to STATE_CONFIRMED
+    assert session["state"] == "STATE_CONFIRMED"
+    assert session.get("ticket_id") is not None
+    assert mock_ctx.send.call_count >= 1
 

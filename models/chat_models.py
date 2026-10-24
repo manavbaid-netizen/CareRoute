@@ -164,13 +164,13 @@ class BookingCommitResponse(Model):
     """
 
     session_id: str
-    ticket_id: str
-    patient_name: str
-    doctor_name: str
-    clinic_name: str
-    room_no: str
-    slot_time: str
-    qr_payload: str
+    ticket_id: str = ""
+    patient_name: str = ""
+    doctor_name: str = ""
+    clinic_name: str = ""
+    room_no: str = ""
+    slot_time: str = ""
+    qr_payload: str = ""
     status: str = "CONFIRMED"
     dossier_path: str | None = None
     slot_date: str | None = None

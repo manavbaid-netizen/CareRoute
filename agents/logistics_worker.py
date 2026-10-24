@@ -77,7 +77,8 @@ async def handle_booking_commit(ctx: Context, sender: str, msg: BookingCommitReq
     dossier = dossier_service.load_dossier(msg.dossier_id)
     if not dossier:
         ctx.logger.error(
-            f"❌ Failed to locate clinical dossier '{msg.dossier_id}' for booking request!"
+            f"❌ Booking rejected: Clinical dossier '{msg.dossier_id}' not found. "
+            f"A dossier is required before appointment booking."
         )
         response = BookingCommitResponse(
             session_id=msg.session_id,
@@ -89,7 +90,7 @@ async def handle_booking_commit(ctx: Context, sender: str, msg: BookingCommitReq
             slot_time="",
             qr_payload="",
             status="ERROR_MISSING_DOSSIER",
-            error_message=f"Clinical dossier '{msg.dossier_id}' not found. Cannot book appointment without clinical dossier.",
+            dossier_path=None,
         )
         await ctx.send(sender, response)
         return

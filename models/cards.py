@@ -185,7 +185,7 @@ def parse_card_action(user_text: str) -> dict[str, Any] | None:
     if phrase_match and len(cleaned.split()) <= 4:
         return {"action": "numeric_choice", "choice": int(phrase_match.group(1))}
 
-    # 4. Words for 1, 2, 3 in English and Hindi
+    # 4. Words for 1, 2, 3, 4 in English, Hindi, and Hinglish
     word_map = {
         "one": 1,
         "first": 1,
@@ -205,11 +205,28 @@ def parse_card_action(user_text: str) -> dict[str, Any] | None:
         "दूसरा": 2,
         "तीन": 3,
         "तीसरा": 3,
+        "चार": 4,
+        "चौथा": 4,
+        "ek": 1,
+        "pehla": 1,
+        "do": 2,
+        "dusra": 2,
+        "doosra": 2,
+        "teen": 3,
+        "tisra": 3,
+        "teesra": 3,
+        "char": 4,
+        "chautha": 4,
     }
     for word, num in word_map.items():
         if (word in cleaned) if not word.isascii() else bool(re.search(rf"\b{word}\b", cleaned)):
-            if len(cleaned.split()) <= 3:
+            if len(cleaned.split()) <= 4:
                 return {"action": "numeric_choice", "choice": num}
+
+    # 5. Extract single isolated digit in short 1-2 word phrases (e.g. 'maybe 2', '2 please', 'book 2', 'choice 2')
+    digit_match = re.search(r"\b([1-9])\b", cleaned)
+    if digit_match and len(cleaned.split()) <= 2:
+        return {"action": "numeric_choice", "choice": int(digit_match.group(1))}
 
     return None
 
