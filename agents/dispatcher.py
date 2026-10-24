@@ -11,6 +11,37 @@ from uagents.asgi import ASGIServer
 from uagents.crypto import Identity
 
 from config import Config
+from models.cards import (
+    create_card_chat,
+    make_booking_receipt_card,
+    make_emergency_sos_card,
+    make_slot_picker_card,
+    make_triage_detail_card,
+    parse_card_action,
+)
+from models.chat_models import (
+    BookingCommitRequest,
+    BookingCommitResponse,
+    ChatAcknowledgement,
+    ChatMessage,
+    EndSessionContent,
+    EscrowLockRequest,
+    EscrowLockResponse,
+    EscrowReleaseRequest,
+    EscrowReleaseResponse,
+    ResourceContent,
+    SlotQueryRequest,
+    SlotQueryResponse,
+    StartSessionContent,
+    TextContent,
+    TriageAnalysisRequest,
+    TriageAnalysisResponse,
+    chat_protocol_spec,
+    create_ack,
+    create_text_chat,
+)
+from services.geo_service import GeoService
+from services.session_store import SessionStore
 
 # CORS & Chromium Private Network Access handler for Agentverse Local Inspector
 _orig_asgi_send = ASGIServer._asgi_send
@@ -57,37 +88,7 @@ class Mailbox401Filter(logging.Filter):
                 return True
             return False  # Suppress repetitive 401 polling flood
         return True
-from models.cards import (
-    create_card_chat,
-    make_booking_receipt_card,
-    make_emergency_sos_card,
-    make_slot_picker_card,
-    make_triage_detail_card,
-    parse_card_action,
-)
-from models.chat_models import (
-    BookingCommitRequest,
-    BookingCommitResponse,
-    ChatAcknowledgement,
-    ChatMessage,
-    EndSessionContent,
-    EscrowLockRequest,
-    EscrowLockResponse,
-    EscrowReleaseRequest,
-    EscrowReleaseResponse,
-    ResourceContent,
-    SlotQueryRequest,
-    SlotQueryResponse,
-    StartSessionContent,
-    TextContent,
-    TriageAnalysisRequest,
-    TriageAnalysisResponse,
-    chat_protocol_spec,
-    create_ack,
-    create_text_chat,
-)
-from services.geo_service import GeoService
-from services.session_store import SessionStore
+
 
 logger = logging.getLogger("CareRoute.Dispatcher")
 
@@ -100,6 +101,7 @@ MAX_INPUT_LENGTH = 1500
 RATE_LIMIT_WINDOW_SECS = 60.0
 MAX_REQUESTS_PER_WINDOW = 20
 _SENDER_MESSAGE_TIMESTAMPS: dict[str, list[float]] = {}
+
 
 def _get_dispatcher_endpoint() -> str | None:
     if Config.AGENT_ENDPOINT:
@@ -139,9 +141,9 @@ logging.getLogger("dispatcher").addFilter(_mb_filter)
 logging.getLogger("mailbox").addFilter(_mb_filter)
 
 
-
 def get_deterministic_address(seed: str) -> str:
     return Identity.from_seed(seed, 0).address
+
 
 # Target worker agent addresses (automatically derived from deterministic seeds)
 WORKER_ADDRESSES = {
@@ -167,14 +169,19 @@ async def startup_handler(ctx: Context) -> None:
         f"🌐 CareRoute Master Gateway Agent (ACP) is online! Address: {dispatcher.address}"
     )
     if Config.USE_AGENTVERSE:
-        ctx.logger.info(f"📬 Mailbox Mode ACTIVE. Connected to Agentverse at {Config.AGENTVERSE_URL}")
+        ctx.logger.info(
+            f"📬 Mailbox Mode ACTIVE. Connected to Agentverse at {Config.AGENTVERSE_URL}"
+        )
     else:
-        ctx.logger.info(f"🔌 Local Endpoint Mode: {Config.get_agent_endpoint(Config.DISPATCHER_PORT)}")
+        ctx.logger.info(
+            f"🔌 Local Endpoint Mode: {Config.get_agent_endpoint(Config.DISPATCHER_PORT)}"
+        )
 
 
 # ==============================================================================
 # REAL AGENT CHAT PROTOCOL (ACP) HANDLERS
 # ==============================================================================
+
 
 @chat_proto.on_message(model=ChatMessage)
 async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> None:
@@ -197,7 +204,10 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
     # 3. Process each content item in ACP message
     for item in msg.content:
         # (A) Start of session
-        if isinstance(item, StartSessionContent) or getattr(item, "type", None) in ("start-session", "start_session"):
+        if isinstance(item, StartSessionContent) or getattr(item, "type", None) in (
+            "start-session",
+            "start_session",
+        ):
             session["state"] = "STATE_INTAKE"
             session_store.save_session(sender, session)
             welcome_text = (
@@ -210,7 +220,10 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             return
 
         # (B) End of session
-        elif isinstance(item, EndSessionContent) or getattr(item, "type", None) in ("end-session", "end_session"):
+        elif isinstance(item, EndSessionContent) or getattr(item, "type", None) in (
+            "end-session",
+            "end_session",
+        ):
             session["state"] = "STATE_CLOSED"
             session_store.save_session(sender, session)
             farewell = "सत्र समाप्त हो गया है। केयररूट से जुड़ने के लिए धन्यवाद। स्वस्थ रहें! 🙏"
@@ -256,7 +269,9 @@ async def handle_acp_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowl
     ctx.logger.debug(f"ACK received from {sender} for msg {msg.acknowledged_msg_id}")
 
 
-async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any], user_text: str) -> None:
+async def _process_user_text(
+    ctx: Context, sender: str, session: dict[str, Any], user_text: str
+) -> None:
     """Process incoming text narrative, button action JSON, or fallback selection with security controls."""
     now = time.time()
 
@@ -274,10 +289,11 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
     timestamps = _SENDER_MESSAGE_TIMESTAMPS.setdefault(sender, [])
     _SENDER_MESSAGE_TIMESTAMPS[sender] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW_SECS]
     if len(_SENDER_MESSAGE_TIMESTAMPS[sender]) >= MAX_REQUESTS_PER_WINDOW:
-        ctx.logger.warning(f"🛑 Rate limit exceeded for {sender} ({len(_SENDER_MESSAGE_TIMESTAMPS[sender])} reqs/min)")
+        ctx.logger.warning(
+            f"🛑 Rate limit exceeded for {sender} ({len(_SENDER_MESSAGE_TIMESTAMPS[sender])} reqs/min)"
+        )
         rate_msg = (
-            "⚠️ आपके पते से बहुत अधिक संदेश प्राप्त हुए हैं। "
-            "कृपया एक मिनट प्रतीक्षा करने के बाद पुनः प्रयास करें।"
+            "⚠️ आपके पते से बहुत अधिक संदेश प्राप्त हुए हैं। कृपया एक मिनट प्रतीक्षा करने के बाद पुनः प्रयास करें।"
         )
         await ctx.send(sender, create_text_chat(rate_msg))
         return
@@ -286,17 +302,24 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
     # Correlation ID for distributed tracing across agent graph
     correlation_id = uuid4().hex[:8]
     session["correlation_id"] = correlation_id
-    ctx.logger.info(f"💬 [CID: {correlation_id}] User text from {sender}: '{user_text[:60]}...' [State: {session['state']}]")
+    ctx.logger.info(
+        f"💬 [CID: {correlation_id}] User text from {sender}: '{user_text[:60]}...' [State: {session['state']}]"
+    )
 
     # 3. Check for nearby CHC / Hospital inquiry
-    if any(kw in user_text.lower() for kw in ["अस्पताल", "नजदीकी अस्पताल", "chc", "hospital", "निकटतम", "nearest chc"]):
+    if any(
+        kw in user_text.lower()
+        for kw in ["अस्पताल", "नजदीकी अस्पताल", "chc", "hospital", "निकटतम", "nearest chc"]
+    ):
         facilities = geo_service.find_nearest_chc(max_results=3)
         chc_header = "🏥 **अलवर जिले के निकटतम सामुदायिक स्वास्थ्य केंद्र (Nearby CHCs):**\n\n"
         chc_body = "\n\n─────────────────\n\n".join(
             geo_service.format_chc_recommendation_hindi(f) for f in facilities
         )
         await ctx.send(sender, create_text_chat(f"{chc_header}{chc_body}"))
-        ctx.logger.info(f"📍 [CID: {correlation_id}] Dispatched nearest CHC information to {sender}")
+        ctx.logger.info(
+            f"📍 [CID: {correlation_id}] Dispatched nearest CHC information to {sender}"
+        )
         return
 
     # Extract patient name if explicitly volunteered
@@ -319,7 +342,9 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
         action = action_data.get("action")
 
         if action == "view_slots":
-            specialty = action_data.get("specialty", session.get("recommended_specialty", "General Medicine"))
+            specialty = action_data.get(
+                "specialty", session.get("recommended_specialty", "General Medicine")
+            )
             session["state"] = "STATE_SLOT_SELECTED"
             session["pending_request"] = {
                 "type": "slots",
@@ -398,7 +423,11 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
                 )
             return
 
-        elif action == "numeric_choice" and session["state"] == "STATE_SLOT_SELECTED" and session.get("available_slots"):
+        elif (
+            action == "numeric_choice"
+            and session["state"] == "STATE_SLOT_SELECTED"
+            and session.get("available_slots")
+        ):
             choice_num = action_data.get("choice", 1)
             slots = session["available_slots"]
             if 1 <= choice_num <= len(slots):
@@ -499,7 +528,9 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
     }
     session_store.save_session(sender, session)
 
-    ctx.logger.info(f"🔍 [CID: {correlation_id}] Routing symptom intake to DiagnosticWorkerAgent for {sender}")
+    ctx.logger.info(
+        f"🔍 [CID: {correlation_id}] Routing symptom intake to DiagnosticWorkerAgent for {sender}"
+    )
     if WORKER_ADDRESSES["diagnostic"]:
         await ctx.send(
             WORKER_ADDRESSES["diagnostic"],
@@ -518,6 +549,7 @@ async def _process_user_text(ctx: Context, sender: str, session: dict[str, Any],
 # WORKER IPC RESPONSES -> DISPATCH TO USER ADDRESS
 # ==============================================================================
 
+
 @dispatcher.on_message(model=TriageAnalysisResponse)
 async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisResponse) -> None:
     """
@@ -535,7 +567,9 @@ async def handle_triage_response(ctx: Context, sender: str, msg: TriageAnalysisR
         session["dossier_id"] = dossier_id
 
     assessment = getattr(msg.dossier, "assessment", None)
-    urgency_val = getattr(getattr(assessment, "triage_urgency", None), "value", "Moderate (Semi-Urgent)")
+    urgency_val = getattr(
+        getattr(assessment, "triage_urgency", None), "value", "Moderate (Semi-Urgent)"
+    )
     specialty_hi = getattr(assessment, "recommended_specialty_hindi", "सामान्य चिकित्सा")
     specialty_en = getattr(assessment, "recommended_specialty", "General Medicine")
     session["recommended_specialty"] = specialty_en
@@ -594,7 +628,9 @@ async def handle_slot_response(ctx: Context, sender: str, msg: SlotQueryResponse
 
 
 @dispatcher.on_message(model=BookingCommitResponse)
-async def handle_booking_commit_response(ctx: Context, sender: str, msg: BookingCommitResponse) -> None:
+async def handle_booking_commit_response(
+    ctx: Context, sender: str, msg: BookingCommitResponse
+) -> None:
     """
     Handle booking confirmation from LogisticsWorkerAgent.
     Initiates 0.5 FET escrow lock coordination with EscrowWorkerAgent.
@@ -612,13 +648,17 @@ async def handle_booking_commit_response(ctx: Context, sender: str, msg: Booking
             "कृपया डॉक्टर के अन्य उपलब्ध समय स्लॉट में से चयन करें।"
         )
         await ctx.send(user_addr, create_text_chat(err_text))
-        ctx.logger.warning(f"❌ Booking failed for user {user_addr}: {msg.error_message or msg.status}")
+        ctx.logger.warning(
+            f"❌ Booking failed for user {user_addr}: {msg.error_message or msg.status}"
+        )
         return
 
     session["booking_details"] = msg.model_dump()
     session["ticket_id"] = msg.ticket_id
 
-    ctx.logger.info(f"💳 Booking reserved for {msg.ticket_id}. Coordinating with EscrowWorkerAgent...")
+    ctx.logger.info(
+        f"💳 Booking reserved for {msg.ticket_id}. Coordinating with EscrowWorkerAgent..."
+    )
 
     if WORKER_ADDRESSES["escrow"]:
         session["pending_request"] = {"type": "escrow", "sent_at": time.time(), "retries": 0}
@@ -667,12 +707,16 @@ async def handle_escrow_lock_response(ctx: Context, sender: str, msg: EscrowLock
 
     intro_text = "🎉 **आपकी ओपीडी बुकिंग सफलतापूर्वक सुनिश्चित हो गई है!**"
     await ctx.send(user_addr, create_card_chat(intro_text, card))
-    ctx.logger.info(f"🎟️ Final Booking Receipt dispatched to user {user_addr} for Ticket {ticket_id}")
+    ctx.logger.info(
+        f"🎟️ Final Booking Receipt dispatched to user {user_addr} for Ticket {ticket_id}"
+    )
     session_store.save_session(user_addr, session)
 
 
 @dispatcher.on_message(model=EscrowReleaseResponse)
-async def handle_escrow_release_response(ctx: Context, sender: str, msg: EscrowReleaseResponse) -> None:
+async def handle_escrow_release_response(
+    ctx: Context, sender: str, msg: EscrowReleaseResponse
+) -> None:
     """
     Handle clinic desk QR check-in refund confirmation.
     Dispatches refund notification to user.
@@ -694,6 +738,7 @@ async def handle_escrow_release_response(ctx: Context, sender: str, msg: EscrowR
 # ==============================================================================
 # WATCHDOG TIMER: TIMEOUTS & RETRIES
 # ==============================================================================
+
 
 @dispatcher.on_interval(period=3.0)
 async def request_timeout_watchdog(ctx: Context) -> None:
@@ -766,7 +811,9 @@ async def request_timeout_watchdog(ctx: Context) -> None:
                     "कृपया कुछ क्षण बाद पुनः प्रयास करें या सीधे 108 एम्बुलेंस / नजदीकी CHC पर संपर्क करें।"
                 )
                 await ctx.send(user_addr, create_text_chat(timeout_msg))
-                ctx.logger.error(f"❌ [CID: {cid}] Worker IPC request failed after retry for {user_addr}")
+                ctx.logger.error(
+                    f"❌ [CID: {cid}] Worker IPC request failed after retry for {user_addr}"
+                )
 
 
 # Include real Agent Chat Protocol in dispatcher with published manifest

@@ -57,7 +57,11 @@ def test_full_primary_telehealth_lifecycle(clean_environment):
         text_transcript=symptom_text,
     )
     assert not is_emergency
-    assert dossier.assessment.triage_urgency in (TriageUrgency.HIGH, TriageUrgency.LOW, TriageUrgency.MODERATE)
+    assert dossier.assessment.triage_urgency in (
+        TriageUrgency.HIGH,
+        TriageUrgency.LOW,
+        TriageUrgency.MODERATE,
+    )
     assert dossier.assessment.recommended_specialty in ("Pulmonology", "General Medicine")
 
     # Step 2: Save initial clinical dossier
@@ -116,7 +120,10 @@ def test_capacity_concurrency_race_conditions(clean_environment):
     roster._ensure_slots_for_date(target_date)
     with sqlite3.connect(roster.db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE slots SET capacity = 3, booked_count = 0 WHERE slot_id = ? AND slot_date = ?", (slot_id, target_date))
+        cursor.execute(
+            "UPDATE slots SET capacity = 3, booked_count = 0 WHERE slot_id = ? AND slot_date = ?",
+            (slot_id, target_date),
+        )
         conn.commit()
 
     successful_bookings = 0
@@ -153,7 +160,9 @@ def test_llm_outage_graceful_degradation():
     client.openai_client = MagicMock()
 
     # Simulate network outage on primary ASI:One, secondary Gemini, and tertiary OpenAI
-    with patch.object(client, "_call_openai_compatible", side_effect=Exception("ASI:One connection timed out")):
+    with patch.object(
+        client, "_call_openai_compatible", side_effect=Exception("ASI:One connection timed out")
+    ):
         with patch.object(client, "_call_gemini", side_effect=Exception("Gemini quota exceeded")):
             dossier, hindi_summary, is_em, reasons = client.generate_clinical_dossier(
                 session_id="test_down",
@@ -163,7 +172,11 @@ def test_llm_outage_graceful_degradation():
             )
 
     assert "fallback" in dossier.engine
-    assert dossier.assessment.triage_urgency in (TriageUrgency.HIGH, TriageUrgency.LOW, TriageUrgency.MODERATE)
+    assert dossier.assessment.triage_urgency in (
+        TriageUrgency.HIGH,
+        TriageUrgency.LOW,
+        TriageUrgency.MODERATE,
+    )
     assert len(dossier.assessment.differential_diagnoses) >= 1
     # Verify zero hallucinated vitals
     assert dossier.objective.vitals_reported == {}

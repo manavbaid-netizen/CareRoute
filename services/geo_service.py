@@ -206,11 +206,15 @@ class GeoService:
                         {
                             "id": f"osm_node_{elem.get('id')}",
                             "name": name,
-                            "facility_type": tags.get("amenity") or tags.get("healthcare") or "Hospital",
+                            "facility_type": tags.get("amenity")
+                            or tags.get("healthcare")
+                            or "Hospital",
                             "latitude": node_lat,
                             "longitude": node_lon,
                             "distance_km": dist,
-                            "address": tags.get("addr:street") or tags.get("addr:city") or "Alwar, Rajasthan",
+                            "address": tags.get("addr:street")
+                            or tags.get("addr:city")
+                            or "Alwar, Rajasthan",
                             "phone": tags.get("phone") or tags.get("contact:phone") or "108",
                             "emergency_helpline": "108",
                             "is_emergency_24x7": tags.get("emergency") == "yes",
@@ -256,7 +260,9 @@ class GeoService:
             fac_copy = dict(facility)
             if seed_name and fac_copy.get("id") == "chc_alwar_main":
                 fac_copy["seed_clinic_name"] = seed_name
-            dist = haversine_distance_km(latitude, longitude, fac_copy["latitude"], fac_copy["longitude"])
+            dist = haversine_distance_km(
+                latitude, longitude, fac_copy["latitude"], fac_copy["longitude"]
+            )
             fac_copy["distance_km"] = dist
             fac_copy["source"] = "verified_offline_directory"
             fallback_results.append(fac_copy)

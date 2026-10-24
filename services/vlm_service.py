@@ -44,25 +44,53 @@ class VLMService:
     # Critical life-threatening tripwire keywords
     RED_FLAGS = {
         "chest_pain": [
-            "सीने में तेज दर्द", "छाती में भारीपन", "छाती में जकड़न", "सीने में दबाव",
-            "chest pain", "severe chest pain", "crushing pain", "radiating pain",
+            "सीने में तेज दर्द",
+            "छाती में भारीपन",
+            "छाती में जकड़न",
+            "सीने में दबाव",
+            "chest pain",
+            "severe chest pain",
+            "crushing pain",
+            "radiating pain",
         ],
         "respiratory_distress": [
-            "सांस लेने में बहुत दिक्कत", "दम घुट रहा है", "सांस फूल रही है", "गले में घरघराहट",
-            "gasping", "breathlessness", "severe dyspnea", "stridor", "unable to breathe",
+            "सांस लेने में बहुत दिक्कत",
+            "दम घुट रहा है",
+            "सांस फूल रही है",
+            "गले में घरघराहट",
+            "gasping",
+            "breathlessness",
+            "severe dyspnea",
+            "stridor",
+            "unable to breathe",
         ],
         "profuse_bleeding": [
-            "खून की उल्टी", "बेहिसाब खून", "मुंह से खून", "उल्टी में खून",
-            "coughing blood", "hemoptysis", "hematemesis", "uncontrolled bleeding",
+            "खून की उल्टी",
+            "बेहिसाब खून",
+            "मुंह से खून",
+            "उल्टी में खून",
+            "coughing blood",
+            "hemoptysis",
+            "hematemesis",
+            "uncontrolled bleeding",
         ],
         "altered_sensorium": [
-            "बेहोश", "बेहोशी", "पहचान नहीं पा रहा", "अचेत",
-            "unconscious", "altered mental status", "fainting", "syncope", "unresponsive",
+            "बेहोश",
+            "बेहोशी",
+            "पहचान नहीं पा रहा",
+            "अचेत",
+            "unconscious",
+            "altered mental status",
+            "fainting",
+            "syncope",
+            "unresponsive",
         ],
     }
 
     def __init__(self) -> None:
-        self.use_mock = Config.USE_MOCK_VLM or (not Config.ASI1_API_KEY and not Config.GEMINI_API_KEY and not Config.OPENAI_API_KEY)
+        self.use_mock = Config.USE_MOCK_VLM or (
+            not Config.ASI1_API_KEY and not Config.GEMINI_API_KEY and not Config.OPENAI_API_KEY
+        )
         self.llm_client = LLMClient(fallback_engine=self)
 
     def scan_safety_tripwires(self, text: str) -> tuple[bool, list[str]]:
@@ -139,9 +167,9 @@ class VLMService:
                 past_medical_history=[],  # Zero fabrication: empty unless stated
             ),
             objective=ObjectiveSOAP(
-                vitals_reported={},       # Zero fabrication: empty unless stated
+                vitals_reported={},  # Zero fabrication: empty unless stated
                 visual_photo_findings=[],
-                ocr_prescriptions=[],     # Zero fabrication: empty unless verified
+                ocr_prescriptions=[],  # Zero fabrication: empty unless verified
                 clinical_signs_summary="High probability of impending hemodynamic or respiratory decompensation.",
             ),
             assessment=AssessmentSOAP(
@@ -189,33 +217,43 @@ class VLMService:
         lower = text.lower()
 
         # Check duration
-        has_duration = bool(re.search(
-            r"\b(?:\d+|दो|तीन|चार|पांच|एक|सप्ताह|हफ्ते|महीने|दिन|कल|आज)\s*(?:दिन|दिनों|हफ्ते|हफ्तों|सप्ताह|महीने|महीनों|साल|घंटे|weeks?|days?|months?|years?|se|से)\b",
-            lower,
-        ))
+        has_duration = bool(
+            re.search(
+                r"\b(?:\d+|दो|तीन|चार|पांच|एक|सप्ताह|हफ्ते|महीने|दिन|कल|आज)\s*(?:दिन|दिनों|हफ्ते|हफ्तों|सप्ताह|महीने|महीनों|साल|घंटे|weeks?|days?|months?|years?|se|से)\b",
+                lower,
+            )
+        )
         if not has_duration:
-            questions.append({
-                "field": "duration",
-                "question_hi": "यह परेशानी आपको कितने दिनों या हफ्तों से महसूस हो रही है?",
-                "question_en": "How many days or weeks have you had this symptom?",
-            })
+            questions.append(
+                {
+                    "field": "duration",
+                    "question_hi": "यह परेशानी आपको कितने दिनों या हफ्तों से महसूस हो रही है?",
+                    "question_en": "How many days or weeks have you had this symptom?",
+                }
+            )
 
         # Check patient demographics
         if not patient_name or patient_name in ("Patient", "Guest", "Unknown", "User"):
-            questions.append({
-                "field": "patient_name",
-                "question_hi": "कृपया मरीज का पूरा नाम और उम्र बताएं ताकि ओपीडी पर्ची सही विवरण से तैयार हो सके।",
-                "question_en": "Please share the patient's full name and age for the CHC OPD slip.",
-            })
+            questions.append(
+                {
+                    "field": "patient_name",
+                    "question_hi": "कृपया मरीज का पूरा नाम और उम्र बताएं ताकि ओपीडी पर्ची सही विवरण से तैयार हो सके।",
+                    "question_en": "Please share the patient's full name and age for the CHC OPD slip.",
+                }
+            )
 
         # Check chronic history
-        has_chronic = bool(re.search(r"\b(?:बीपी|शुगर|अस्थमा|दमा|बीमारी|bp|sugar|diabetes|asthma|allergy)\b", lower))
+        has_chronic = bool(
+            re.search(r"\b(?:बीपी|शुगर|अस्थमा|दमा|बीमारी|bp|sugar|diabetes|asthma|allergy)\b", lower)
+        )
         if not has_chronic:
-            questions.append({
-                "field": "associated_history",
-                "question_hi": "क्या आपको पहले से कोई पुरानी बीमारी (जैसे शुगर, बीपी, दमा) या कोई दवा की एलर्जी है?",
-                "question_en": "Do you have any chronic conditions (like diabetes, BP, asthma) or drug allergies?",
-            })
+            questions.append(
+                {
+                    "field": "associated_history",
+                    "question_hi": "क्या आपको पहले से कोई पुरानी बीमारी (जैसे शुगर, बीपी, दमा) या कोई दवा की एलर्जी है?",
+                    "question_en": "Do you have any chronic conditions (like diabetes, BP, asthma) or drug allergies?",
+                }
+            )
 
         return questions[:3]
 
@@ -246,18 +284,24 @@ class VLMService:
         # 1. NTEP Pulmonary TB Suspect Screening
         # Requires: Cough >= 2 weeks AND at least one constitutional B-symptom
         # ----------------------------------------------------------------------
-        has_cough = bool(re.search(
-            r"(?:खांसी|खंखा|कफ|बलगम)|\b(?:cough|coughing|khansi|balgam|sputum)\b",
-            lower,
-        ))
-        has_prolonged = bool(re.search(
-            r"(?:दो\s*हफ्ते|2\s*हफ्ते|दो\s*सप्ताह|2\s*सप्ताह|14\s*दिन|महीने)|\b(?:two\s*weeks|2\s*weeks|> ?2\s*weeks|14\s*days|months?|do\s*hafte)\b",
-            lower,
-        ))
+        has_cough = bool(
+            re.search(
+                r"(?:खांसी|खंखा|कफ|बलगम)|\b(?:cough|coughing|khansi|balgam|sputum)\b",
+                lower,
+            )
+        )
+        has_prolonged = bool(
+            re.search(
+                r"(?:दो\s*हफ्ते|2\s*हफ्ते|दो\s*सप्ताह|2\s*सप्ताह|14\s*दिन|महीने)|\b(?:two\s*weeks|2\s*weeks|> ?2\s*weeks|14\s*days|months?|do\s*hafte)\b",
+                lower,
+            )
+        )
         b_symptoms = []
         if re.search(r"(?:बुखार|ताप)|\b(?:fever|pyrexia|bukhar)\b", lower):
             b_symptoms.append("Fever / Pyrexia (बुखार)")
-        if re.search(r"(?:शाम\s*को\s*(?:\S+\s*)?बुखार)|\b(?:evening\s*(?:fever|pyrexia|chills))\b", lower):
+        if re.search(
+            r"(?:शाम\s*को\s*(?:\S+\s*)?बुखार)|\b(?:evening\s*(?:fever|pyrexia|chills))\b", lower
+        ):
             b_symptoms.append("Evening rise of temperature (शाम को बुखार)")
         if re.search(r"(?:वजन\s*(?:घट|कम))|\b(?:weight\s*loss|vajan\s*(?:ghat|kam))\b", lower):
             b_symptoms.append("Constitutional weight loss (वजन घटना)")
@@ -276,10 +320,12 @@ class VLMService:
         # ----------------------------------------------------------------------
         # 3. Dermatological Presentation Screening
         # ----------------------------------------------------------------------
-        is_derm = bool(re.search(
-            r"(?:त्वचा|चर्म|दाद|खुजली|चकत्ते|फोड़े|फुंसी|दाने)|\b(?:skin|rash|rashes|itching|itchy|fungal|ringworm|eczema|psoriasis|boils|lesion)\b",
-            lower,
-        )) or (image_type == "lesion_photo")
+        is_derm = bool(
+            re.search(
+                r"(?:त्वचा|चर्म|दाद|खुजली|चकत्ते|फोड़े|फुंसी|दाने)|\b(?:skin|rash|rashes|itching|itchy|fungal|ringworm|eczema|psoriasis|boils|lesion)\b",
+                lower,
+            )
+        ) or (image_type == "lesion_photo")
 
         # ----------------------------------------------------------------------
         # Case Routing: TB Suspect vs Acute Respiratory vs Dermatology vs General Medicine
@@ -305,9 +351,9 @@ class VLMService:
                     past_medical_history=[],  # Zero fabrication: empty unless stated
                 ),
                 objective=ObjectiveSOAP(
-                    vitals_reported={},       # Zero fabrication: empty unless stated
+                    vitals_reported={},  # Zero fabrication: empty unless stated
                     visual_photo_findings=[],
-                    ocr_prescriptions=[],     # Zero fabrication: empty unless verified
+                    ocr_prescriptions=[],  # Zero fabrication: empty unless verified
                     clinical_signs_summary="NTEP clinical suspect criteria met. Vitals pending in-person CHC triage.",
                 ),
                 assessment=AssessmentSOAP(
@@ -417,9 +463,7 @@ class VLMService:
                 emergency_tripwires_hit=[],
             )
 
-            hindi_summary = (
-                f"{acute_resp['guidance_hi']}\n\n{CLINICAL_DISCLAIMER_HI}"
-            )
+            hindi_summary = f"{acute_resp['guidance_hi']}\n\n{CLINICAL_DISCLAIMER_HI}"
 
         elif is_derm:
             # Never fabricate image findings when vision model is inactive
@@ -444,9 +488,9 @@ class VLMService:
                     past_medical_history=[],  # Zero fabrication: empty
                 ),
                 objective=ObjectiveSOAP(
-                    vitals_reported={},       # Zero fabrication: empty
+                    vitals_reported={},  # Zero fabrication: empty
                     visual_photo_findings=findings,
-                    ocr_prescriptions=[],     # Zero fabrication: empty
+                    ocr_prescriptions=[],  # Zero fabrication: empty
                     clinical_signs_summary="Dermatological complaint. Full skin examination pending at CHC.",
                 ),
                 assessment=AssessmentSOAP(
@@ -493,10 +537,12 @@ class VLMService:
             # General Medicine / Unclassified Symptom Presentation (Default)
             # NEVER defaults to TB or Pulmonology!
             # ------------------------------------------------------------------
-            has_symptom = bool(re.search(
-                r"\b(?:दर्द|बुखार|चोट|सिर|पेट|घुटना|जोड़|कमजोरी|चक्कर|उल्टी|दस्त|pain|fever|headache|ache|injury|hurt|vomit|diarrhea|weakness|dizzy)\b",
-                lower,
-            ))
+            has_symptom = bool(
+                re.search(
+                    r"\b(?:दर्द|बुखार|चोट|सिर|पेट|घुटना|जोड़|कमजोरी|चक्कर|उल्टी|दस्त|pain|fever|headache|ache|injury|hurt|vomit|diarrhea|weakness|dizzy)\b",
+                    lower,
+                )
+            )
 
             if has_symptom:
                 differentials = [
@@ -527,9 +573,9 @@ class VLMService:
                     past_medical_history=[],  # Zero fabrication: empty
                 ),
                 objective=ObjectiveSOAP(
-                    vitals_reported={},       # Zero fabrication: empty
+                    vitals_reported={},  # Zero fabrication: empty
                     visual_photo_findings=[],
-                    ocr_prescriptions=[],     # Zero fabrication: empty
+                    ocr_prescriptions=[],  # Zero fabrication: empty
                     clinical_signs_summary="Outpatient presentation. Full vitals to be recorded at CHC triage desk.",
                 ),
                 assessment=AssessmentSOAP(
@@ -593,7 +639,7 @@ STRICT CLINICAL RULES:
 4. Output both a reassuring, empathetic plain Hindi summary for the patient and a structured English SOAP record.
 
 Patient Input: {text_transcript}
-Image Context: {image_type or 'None'}
+Image Context: {image_type or "None"}
 """
         # If live client responds, parse response into ClinicalDossier
         # In case of any parsing or network mismatch, the caller's try/except smoothly delegates to _mock_clinical_analysis

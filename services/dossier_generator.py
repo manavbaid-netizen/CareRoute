@@ -19,7 +19,9 @@ class DossierGeneratorService:
         self.storage_dir = storage_dir or Config.DOSSIERS_DIR
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_dossier(self, dossier: ClinicalDossier, ticket_id: str | None = None) -> dict[str, str]:
+    def save_dossier(
+        self, dossier: ClinicalDossier, ticket_id: str | None = None
+    ) -> dict[str, str]:
         """
         Persist the clinical dossier to disk as both JSON and formatted Markdown.
         Returns paths to the saved files.
@@ -65,7 +67,9 @@ class DossierGeneratorService:
                     pass
         return removed
 
-    def render_doctor_markdown(self, dossier: ClinicalDossier, ticket_id: str = "TICKET-PENDING") -> str:
+    def render_doctor_markdown(
+        self, dossier: ClinicalDossier, ticket_id: str = "TICKET-PENDING"
+    ) -> str:
         """
         Format the ClinicalDossier into a 3-minute high-density English OPD Clinical Slip.
         """
@@ -78,7 +82,7 @@ class DossierGeneratorService:
         med_rows = ""
         if o.ocr_prescriptions:
             for m in o.ocr_prescriptions:
-                med_rows += f"| {m.drug_name} | {m.dosage} | {m.frequency} | {m.duration or 'N/A'} | {int(m.confidence*100)}% |\n"
+                med_rows += f"| {m.drug_name} | {m.dosage} | {m.frequency} | {m.duration or 'N/A'} | {int(m.confidence * 100)}% |\n"
         else:
             med_rows = "| None reported / No prior prescription slip uploaded | - | - | - | - |\n"
 
@@ -117,7 +121,7 @@ class DossierGeneratorService:
 - **Timestamp**: `{dossier.created_at}`
 - **Triage Level**: {urgency_badge}
 - **Recommended CHC Specialty**: **{a.recommended_specialty}** ({a.recommended_specialty_hindi})
-- **Engine**: {dossier.engine or 'ASI:One Reasoning + Safe Rule Fallback'}
+- **Engine**: {dossier.engine or "ASI:One Reasoning + Safe Rule Fallback"}
 
 ---
 
@@ -129,15 +133,15 @@ class DossierGeneratorService:
 - **History of Present Illness (HPI)**:
   {s.history_of_present_illness}
 - **Associated Symptoms Reported**:
-  {', '.join(s.associated_symptoms) if s.associated_symptoms else 'None reported'}
+  {", ".join(s.associated_symptoms) if s.associated_symptoms else "None reported"}
 - **Patient-Reported Past Medical History**:
-  {', '.join(s.past_medical_history) if s.past_medical_history else 'None reported / denies chronic illness'}
+  {", ".join(s.past_medical_history) if s.past_medical_history else "None reported / denies chronic illness"}
 
 ---
 
 ## 2. OBJECTIVE (O) - VITALS, EXAM & OCR OBSERVATIONS
 - **Patient Reported Vitals**:
-  {', '.join([f'{k}: {v}' for k, v in o.vitals_reported.items()]) if o.vitals_reported else 'Not reported / pending clinic desk vitals assessment'}
+  {", ".join([f"{k}: {v}" for k, v in o.vitals_reported.items()]) if o.vitals_reported else "Not reported / pending clinic desk vitals assessment"}
 - **Visual Inspection Findings (Lesion / Morphological Photos)**:
 {visual_rows}
 - **Medication History (Extracted via OCR/Prescription Parsing)**:

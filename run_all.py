@@ -80,7 +80,9 @@ def main() -> None:
             processes.append((name, p))
             time.sleep(0.5)
 
-        console.print("\n[bold green]✅ All 4 CareRoute agents running concurrently![/bold green]\n")
+        console.print(
+            "\n[bold green]✅ All 4 CareRoute agents running concurrently![/bold green]\n"
+        )
 
         # Keep parent process alive to monitor children
         while True:
@@ -88,7 +90,9 @@ def main() -> None:
             for name, p in processes:
                 ret = p.poll()
                 if ret is not None:
-                    console.print(f"[bold red]Agent {name} exited unexpectedly with code {ret}![/bold red]")
+                    console.print(
+                        f"[bold red]Agent {name} exited unexpectedly with code {ret}![/bold red]"
+                    )
                     return
 
     except KeyboardInterrupt:

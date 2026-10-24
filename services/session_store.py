@@ -51,9 +51,7 @@ class SessionStore:
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM patient_sessions WHERE user_address = ?", (user_address,)
-            )
+            cursor.execute("SELECT * FROM patient_sessions WHERE user_address = ?", (user_address,))
             row = cursor.fetchone()
 
             if row:
@@ -64,9 +62,15 @@ class SessionStore:
                     "patient_id": row["patient_id"],
                     "patient_name": row["patient_name"],
                     "dossier_id": row["dossier_id"],
-                    "selected_slot": json.loads(row["selected_slot_json"]) if row["selected_slot_json"] else None,
-                    "booking_details": json.loads(row["booking_details_json"]) if row["booking_details_json"] else None,
-                    "pending_request": json.loads(row["pending_request_json"]) if row["pending_request_json"] else None,
+                    "selected_slot": json.loads(row["selected_slot_json"])
+                    if row["selected_slot_json"]
+                    else None,
+                    "booking_details": json.loads(row["booking_details_json"])
+                    if row["booking_details_json"]
+                    else None,
+                    "pending_request": json.loads(row["pending_request_json"])
+                    if row["pending_request_json"]
+                    else None,
                     "metadata": json.loads(row["metadata_json"]) if row["metadata_json"] else {},
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
@@ -102,9 +106,15 @@ class SessionStore:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         session["updated_at"] = now
 
-        selected_slot_json = json.dumps(session.get("selected_slot")) if session.get("selected_slot") else None
-        booking_details_json = json.dumps(session.get("booking_details")) if session.get("booking_details") else None
-        pending_request_json = json.dumps(session.get("pending_request")) if session.get("pending_request") else None
+        selected_slot_json = (
+            json.dumps(session.get("selected_slot")) if session.get("selected_slot") else None
+        )
+        booking_details_json = (
+            json.dumps(session.get("booking_details")) if session.get("booking_details") else None
+        )
+        pending_request_json = (
+            json.dumps(session.get("pending_request")) if session.get("pending_request") else None
+        )
         metadata_json = json.dumps(session.get("metadata", {}))
 
         with sqlite3.connect(self.db_path) as conn:

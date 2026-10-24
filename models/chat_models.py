@@ -81,11 +81,13 @@ def create_ack(acknowledged_msg_id: UUID | str) -> ChatAcknowledgement:
 # INTERNAL MULTI-AGENT IPC ENVELOPES (Between Dispatcher and Workers)
 # ==============================================================================
 
+
 class TriageAnalysisRequest(Model):
     """
     Sent from DispatcherAgent -> DiagnosticWorkerAgent.
     Carries patient raw vernacular transcript and optional symptom/prescription images.
     """
+
     session_id: str
     patient_id: str
     patient_name: str = "Patient"
@@ -101,6 +103,7 @@ class TriageAnalysisResponse(Model):
     Returned from DiagnosticWorkerAgent -> DispatcherAgent.
     Contains the full SOAP Clinical Dossier, empathetic Hindi summary, and safety flags.
     """
+
     session_id: str
     patient_id: str
     dossier: ClinicalDossier
@@ -115,6 +118,7 @@ class SlotQueryRequest(Model):
     Sent from DispatcherAgent -> LogisticsWorkerAgent.
     Requests available appointment slots for the target clinical specialty.
     """
+
     session_id: str
     specialty: str
     clinic_id: str | None = None
@@ -127,6 +131,7 @@ class SlotQueryResponse(Model):
     Returned from LogisticsWorkerAgent -> DispatcherAgent.
     Supplies matching doctor information and currently available slots.
     """
+
     session_id: str
     clinic_name: str
     doctor_name: str
@@ -141,6 +146,7 @@ class BookingCommitRequest(Model):
     Sent from DispatcherAgent -> LogisticsWorkerAgent.
     Confirms an OPD appointment for a designated slot and attaches the clinical dossier.
     """
+
     session_id: str
     patient_id: str
     patient_name: str
@@ -156,6 +162,7 @@ class BookingCommitResponse(Model):
     Returned from LogisticsWorkerAgent -> DispatcherAgent.
     Confirms booking registration and provides appointment ticket & check-in token.
     """
+
     session_id: str
     ticket_id: str
     patient_name: str
@@ -176,6 +183,7 @@ class EscrowLockRequest(Model):
     Sent from DispatcherAgent -> EscrowWorkerAgent.
     Requests locking of refundable anti-no-show deposit (0.5 FET).
     """
+
     session_id: str
     patient_id: str
     ticket_id: str
@@ -189,6 +197,7 @@ class EscrowLockResponse(Model):
     Returned from EscrowWorkerAgent -> DispatcherAgent.
     Acknowledges receipt & lock of the anti-no-show commitment deposit.
     """
+
     session_id: str
     ticket_id: str
     status: str
@@ -202,6 +211,7 @@ class EscrowReleaseRequest(Model):
     """
     Sent to EscrowWorkerAgent upon physical clinic check-in.
     """
+
     ticket_id: str
     scanned_by: str
     qr_token: str | None = None
@@ -213,6 +223,7 @@ class EscrowReleaseResponse(Model):
     """
     Returned from EscrowWorkerAgent after refund settlement.
     """
+
     ticket_id: str
     status: str
     refund_amount_fet: float

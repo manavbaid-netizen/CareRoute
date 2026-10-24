@@ -36,9 +36,7 @@ async def startup_handler(ctx: Context) -> None:
 
 
 @logistics_worker.on_message(model=SlotQueryRequest)
-async def handle_slot_query(
-    ctx: Context, sender: str, msg: SlotQueryRequest
-) -> None:
+async def handle_slot_query(ctx: Context, sender: str, msg: SlotQueryRequest) -> None:
     """
     Handle appointment slot search request from Dispatcher.
     Matches the recommended clinical specialty to available CHC doctors and OPD timings.
@@ -64,9 +62,7 @@ async def handle_slot_query(
 
 
 @logistics_worker.on_message(model=BookingCommitRequest)
-async def handle_booking_commit(
-    ctx: Context, sender: str, msg: BookingCommitRequest
-) -> None:
+async def handle_booking_commit(ctx: Context, sender: str, msg: BookingCommitRequest) -> None:
     """
     Handle confirmed appointment booking and register patient in CHC roster.
     Triggers generation of the Doctor's 3-minute OPD Clinical Dossier.
@@ -128,9 +124,7 @@ async def handle_booking_commit(
     saved_paths = dossier_service.save_dossier(dossier, ticket_id=booking["ticket_id"])
     dossier_path = saved_paths["md_path"]
     roster_service.update_dossier_path(booking["ticket_id"], dossier_path)
-    ctx.logger.info(
-        f"📄 Doctor's Clinical Intake Dossier generated at: {dossier_path}"
-    )
+    ctx.logger.info(f"📄 Doctor's Clinical Intake Dossier generated at: {dossier_path}")
 
     response = BookingCommitResponse(
         session_id=msg.session_id,

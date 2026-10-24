@@ -33,7 +33,7 @@ def test_finding_7_exact_sentence_detected():
     # Check that reasons are specific, not generic
     for r in reasons:
         assert "Critical red flag symptoms detected" not in r
-        assert ("सीने" in r or "श्वसन" in r or "Chest" in r or "Respiratory" in r)
+        assert "सीने" in r or "श्वसन" in r or "Chest" in r or "Respiratory" in r
 
 
 def test_finding_7_all_previously_missed_phrases():
@@ -63,7 +63,9 @@ def test_finding_7_all_previously_missed_phrases():
         assert is_em is True, f"Failed to detect emergency for: '{text}'"
         assert len(reasons) >= 1
         matched_cats = [h["category"] for h in hits]
-        assert expected_cat in matched_cats, f"Expected {expected_cat} in {matched_cats} for '{text}'"
+        assert expected_cat in matched_cats, (
+            f"Expected {expected_cat} in {matched_cats} for '{text}'"
+        )
 
 
 def test_finding_7_negation_no_false_positives():
@@ -85,7 +87,9 @@ def test_finding_7_negation_no_false_positives():
 
     for text in negated_cases:
         is_em, reasons, hits = SafetyService.scan_for_emergencies(text)
-        assert is_em is False, f"False positive triggered for negated phrase: '{text}', reasons: {reasons}"
+        assert is_em is False, (
+            f"False positive triggered for negated phrase: '{text}', reasons: {reasons}"
+        )
 
 
 def test_full_corpus_100_percent_critical_positives():
@@ -125,7 +129,9 @@ def test_vlm_service_uses_safetyservice():
 
 def test_tele_manas_helpline_in_suicidal_response():
     """Verify Tele-MANAS helpline 14416 is provided in suicidal crisis guidance."""
-    is_em, reasons, hits = SafetyService.scan_for_emergencies("I want to kill myself, feeling suicidal")
+    is_em, reasons, hits = SafetyService.scan_for_emergencies(
+        "I want to kill myself, feeling suicidal"
+    )
     assert is_em is True
     response = SafetyService.build_emergency_directive_response(reasons, hits)
     assert "14416" in response

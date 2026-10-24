@@ -107,12 +107,18 @@ def test_per_date_isolation(roster):
     slot_id = "ALW_DERM_1145"  # Capacity: 2
 
     # Fill day 1
-    roster.book_appointment(slot_id=slot_id, patient_id="P1", patient_name="P1", dossier_id="D1", slot_date=day1)
-    roster.book_appointment(slot_id=slot_id, patient_id="P2", patient_name="P2", dossier_id="D2", slot_date=day1)
+    roster.book_appointment(
+        slot_id=slot_id, patient_id="P1", patient_name="P1", dossier_id="D1", slot_date=day1
+    )
+    roster.book_appointment(
+        slot_id=slot_id, patient_id="P2", patient_name="P2", dossier_id="D2", slot_date=day1
+    )
 
     # Day 1 is now full
     with pytest.raises(ValueError) as exc:
-        roster.book_appointment(slot_id=slot_id, patient_id="P3", patient_name="P3", dossier_id="D3", slot_date=day1)
+        roster.book_appointment(
+            slot_id=slot_id, patient_id="P3", patient_name="P3", dossier_id="D3", slot_date=day1
+        )
     assert "SLOT_FULL" in str(exc.value)
 
     # Day 2 still has full capacity!

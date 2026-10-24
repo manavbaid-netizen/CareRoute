@@ -61,7 +61,11 @@ def check_geo_service() -> dict[str, Any]:
         geo = GeoService()
         chcs = geo.find_nearest_chc(max_results=2)
         if len(chcs) >= 1:
-            return {"status": "HEALTHY", "nearest_facility": chcs[0]["name"], "source": chcs[0]["source"]}
+            return {
+                "status": "HEALTHY",
+                "nearest_facility": chcs[0]["name"],
+                "source": chcs[0]["source"],
+            }
         return {"status": "DEGRADED", "nearest_facility": None}
     except Exception as exc:
         return {"status": "UNHEALTHY", "error": str(exc)}

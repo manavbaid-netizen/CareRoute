@@ -41,6 +41,7 @@ def _get_seed(env_var_name: str) -> str:
 
 class ConfigMeta(type):
     """Metaclass allowing class-level property access for dynamic seed lookup."""
+
     @property
     def DISPATCHER_SEED(cls) -> str:
         return _get_seed("DISPATCHER_SEED")
@@ -130,7 +131,9 @@ class Config(metaclass=ConfigMeta):
 
     # UI Options
     USE_INTERACTIVE_CARDS: bool = os.getenv("USE_INTERACTIVE_CARDS", "true").lower() in (
-        "true", "1", "yes"
+        "true",
+        "1",
+        "yes",
     )
 
     # Data Storage Paths

@@ -7,7 +7,7 @@ from typing import Any
 # Verified Government of India National Helplines
 HELPLINE_AMBULANCE = "108"
 HELPLINE_NATIONAL_EMERGENCY = "112"
-HELPLINE_TELE_MANAS = "14416"          # Tele Mental Health Assistance and Networking Across States
+HELPLINE_TELE_MANAS = "14416"  # Tele Mental Health Assistance and Networking Across States
 HELPLINE_TELE_MANAS_TOLLFREE = "1800-891-4416"
 HELPLINE_KIRAN_MENTAL_HEALTH = "1800-599-0019"
 
@@ -240,11 +240,11 @@ def is_negated(text: str, match_start: int, match_end: int) -> bool:
     """
     pre_raw = text[:match_start]
     delims_pre = list(CLAUSE_DELIMITERS.finditer(pre_raw))
-    pre_clause = pre_raw[delims_pre[-1].end():] if delims_pre else pre_raw[-35:]
+    pre_clause = pre_raw[delims_pre[-1].end() :] if delims_pre else pre_raw[-35:]
 
     post_raw = text[match_end:]
     delim_post = CLAUSE_DELIMITERS.search(post_raw)
-    post_clause = post_raw[:delim_post.start()] if delim_post else post_raw[:35]
+    post_clause = post_raw[: delim_post.start()] if delim_post else post_raw[:35]
 
     # Check English/prefix negations (e.g., "no chest pain", "denies breathlessness")
     for np in NEGATION_PREFIXES:
@@ -294,11 +294,13 @@ class SafetyService:
                         continue  # Negated phrase, skip
 
                     category_hit = True
-                    hits.append({
-                        "category": category,
-                        "matched_text": match.group(0),
-                        "reason": reason_str,
-                    })
+                    hits.append(
+                        {
+                            "category": category,
+                            "matched_text": match.group(0),
+                            "reason": reason_str,
+                        }
+                    )
                     break  # Hit confirmed for this pattern
 
                 if category_hit:

@@ -64,10 +64,13 @@ def create_payment_request(
     )
 
 
-def verify_testnet_tx(tx_hash: str, expected_recipient: str, expected_amount: float) -> tuple[bool, str]:
+def verify_testnet_tx(
+    tx_hash: str, expected_recipient: str, expected_amount: float
+) -> tuple[bool, str]:
     """Verify transaction on Fetch.ai Dorado Testnet RPC."""
     import json
     import urllib.request
+
     clean_tx = tx_hash.replace("0x", "").upper()
     url = f"{Config.FETCH_TESTNET_RPC}/tx?hash=0x{clean_tx}"
     try:
@@ -83,14 +86,13 @@ def verify_testnet_tx(tx_hash: str, expected_recipient: str, expected_amount: fl
 
 @escrow_worker.on_event("startup")
 async def startup_handler(ctx: Context) -> None:
-    ctx.logger.info(
-        f"💰 CareRoute Escrow & Payment Agent online! Address: {escrow_worker.address}"
-    )
+    ctx.logger.info(f"💰 CareRoute Escrow & Payment Agent online! Address: {escrow_worker.address}")
 
 
 # ==============================================================================
 # 1. OFFICIAL PAYMENT PROTOCOL HANDLERS
 # ==============================================================================
+
 
 @payment_proto.on_message(model=CommitPayment)
 async def handle_commit_payment(ctx: Context, sender: str, msg: CommitPayment) -> None:
@@ -120,7 +122,9 @@ async def handle_commit_payment(ctx: Context, sender: str, msg: CommitPayment) -
 
     # 2. Verify transaction based on PAYMENT_MODE
     if Config.PAYMENT_MODE == "testnet":
-        valid, reason = verify_testnet_tx(msg.transaction_id, str(escrow_worker.address), amount_float)
+        valid, reason = verify_testnet_tx(
+            msg.transaction_id, str(escrow_worker.address), amount_float
+        )
         if not valid:
             ctx.logger.warning(f"❌ Testnet tx verification failed: {reason}")
             await ctx.send(sender, CancelPayment(transaction_id=msg.transaction_id, reason=reason))
@@ -159,10 +163,9 @@ async def handle_reject_payment(ctx: Context, sender: str, msg: RejectPayment) -
 # 2. INTERNAL WORKER IPC HANDLERS
 # ==============================================================================
 
+
 @escrow_worker.on_message(model=EscrowLockRequest)
-async def handle_escrow_lock(
-    ctx: Context, sender: str, msg: EscrowLockRequest
-) -> None:
+async def handle_escrow_lock(ctx: Context, sender: str, msg: EscrowLockRequest) -> None:
     """
     Handle internal IPC request from DispatcherAgent to lock anti-no-show deposit.
     Persists state directly into SQLite escrow table.
@@ -202,9 +205,7 @@ async def handle_escrow_lock(
 
 
 @escrow_worker.on_message(model=EscrowReleaseRequest)
-async def handle_escrow_release(
-    ctx: Context, sender: str, msg: EscrowReleaseRequest
-) -> None:
+async def handle_escrow_release(ctx: Context, sender: str, msg: EscrowReleaseRequest) -> None:
     """
     Handle physical QR code check-in scan from clinic desk.
     Enforces reception desk authorization and token integrity.
@@ -280,9 +281,9 @@ def execute_patient_checkin(
         )
 
     # 3. Check for double-refund / prior release
-    current_status = (escrow.get("status") if escrow else booking.get("escrow_status", ""))
+    current_status = escrow.get("status") if escrow else booking.get("escrow_status", "")
     if current_status == "REFUNDED":
-        prior_tx = (escrow.get("refund_tx") if escrow else "sim_refund_prior_settlement")
+        prior_tx = escrow.get("refund_tx") if escrow else "sim_refund_prior_settlement"
         return EscrowReleaseResponse(
             ticket_id=ticket_id,
             status="ALREADY_RELEASED",
@@ -292,9 +293,13 @@ def execute_patient_checkin(
         )
 
     # 4. Token validation if provided
-    expected_token = (booking.get("qr_hash") if booking else "") or (escrow.get("qr_token") if escrow else "")
+    expected_token = (booking.get("qr_hash") if booking else "") or (
+        escrow.get("qr_token") if escrow else ""
+    )
     if qr_token and expected_token and (qr_token.strip() != expected_token.strip()):
-        logger.warning(f"❌ Invalid QR token for {ticket_id}. Expected={expected_token[:15]}..., Got={qr_token[:15]}...")
+        logger.warning(
+            f"❌ Invalid QR token for {ticket_id}. Expected={expected_token[:15]}..., Got={qr_token[:15]}..."
+        )
         return EscrowReleaseResponse(
             ticket_id=ticket_id,
             status="INVALID_TOKEN",
@@ -323,7 +328,9 @@ def execute_patient_checkin(
 
     logger.info(f"💸 Escrow deposit refunded for {ticket_id}! Tx: {refund_tx}")
 
-    sim_prefix = "[SIMULATED - PAYMENT_MODE=simulation] " if Config.PAYMENT_MODE == "simulation" else ""
+    sim_prefix = (
+        "[SIMULATED - PAYMENT_MODE=simulation] " if Config.PAYMENT_MODE == "simulation" else ""
+    )
     return EscrowReleaseResponse(
         ticket_id=ticket_id,
         status="REFUNDED",

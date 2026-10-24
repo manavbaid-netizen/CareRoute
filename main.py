@@ -134,13 +134,15 @@ def run_interactive_demo() -> None:
     # --------------------------------------------------------------------------
     # SCENARIO 1: Rural Patient Vernacular Intake (Tuberculosis B-symptoms)
     # --------------------------------------------------------------------------
-    console.print("\n[bold yellow]═══ STEP 1: PATIENT VERNACULAR INTAKE (ASI:One Interface) ═══[/bold yellow]")
+    console.print(
+        "\n[bold yellow]═══ STEP 1: PATIENT VERNACULAR INTAKE (ASI:One Interface) ═══[/bold yellow]"
+    )
     patient_transcript = "नमस्ते डॉक्टर साहब, मुझे दो हफ्ते से शाम को हल्का बुखार आ रहा है, बलगम वाली खांसी है और 3 किलो वजन घट गया है।"
     patient_name = "रामकुमार (Ram Kumar, 46M)"
     session_id = "session_alwar_demo_01"
     patient_id = "PAT-ALW-991"
 
-    console.print(f"[bold cyan]Patient Input:[/bold cyan] [italic]\"{patient_transcript}\"[/italic]")
+    console.print(f'[bold cyan]Patient Input:[/bold cyan] [italic]"{patient_transcript}"[/italic]')
     console.print(f"[cyan]Demographics:[/cyan] {patient_name} | Location: Alwar Rural District")
     time.sleep(1)
 
@@ -149,10 +151,16 @@ def run_interactive_demo() -> None:
     if is_emergency:
         console.print("[bold red]🚨 RED FLAG TRIPPED - HALTING FLOW[/bold red]")
     else:
-        console.print("[bold green]✅ No acute red-flag life threats detected. Proceeding with clinical triage.[/bold green]")
+        console.print(
+            "[bold green]✅ No acute red-flag life threats detected. Proceeding with clinical triage.[/bold green]"
+        )
 
-    console.print("\n[bold yellow]═══ STEP 3: VLM CLINICAL REASONING & SOAP GENERATION ═══[/bold yellow]")
-    console.print("[dim]DiagnosticWorkerAgent parsing vernacular terms -> 'शाम को बुखार' (evening pyrexia), 'खांसी' (productive cough >14d), 'वजन घटना' (constitutional weight loss)...[/dim]")
+    console.print(
+        "\n[bold yellow]═══ STEP 3: VLM CLINICAL REASONING & SOAP GENERATION ═══[/bold yellow]"
+    )
+    console.print(
+        "[dim]DiagnosticWorkerAgent parsing vernacular terms -> 'शाम को बुखार' (evening pyrexia), 'खांसी' (productive cough >14d), 'वजन घटना' (constitutional weight loss)...[/dim]"
+    )
     time.sleep(1.5)
 
     dossier, hindi_summary, is_emergency, emergency_reasons = vlm.analyze_case(
@@ -164,7 +172,9 @@ def run_interactive_demo() -> None:
         image_type="prescription_slip",
     )
 
-    console.print(f"\n[bold green]Empathetic Hindi Guidance to Patient:[/bold green]\n{hindi_summary}\n")
+    console.print(
+        f"\n[bold green]Empathetic Hindi Guidance to Patient:[/bold green]\n{hindi_summary}\n"
+    )
 
     # Present ASI Interactive Triage Card
     triage_card = make_triage_detail_card(
@@ -181,9 +191,12 @@ def run_interactive_demo() -> None:
             f"[bold]HEADER:[/bold] {triage_card['header']['title']}\n"
             f"[bold]URGENCY BADGE:[/bold] {triage_card['header']['badge']}\n\n"
             f"[bold]RECOMMENDED SPECIALTY:[/bold] {triage_card['sections'][0]['highlight']}\n\n"
-            f"[bold]DIFFERENTIAL DIAGNOSES:[/bold]\n" + "\n".join([f"  • {item}" for item in triage_card['sections'][1]['items']]) + "\n\n"
+            f"[bold]DIFFERENTIAL DIAGNOSES:[/bold]\n"
+            + "\n".join([f"  • {item}" for item in triage_card["sections"][1]["items"]])
+            + "\n\n"
             f"[bold]PRE-VISIT ADVICE:[/bold]\n{triage_card['sections'][2]['content']}\n\n"
-            f"[bold green]INTERACTIVE ACTIONS:[/bold green]\n" + "\n".join([f"  [{a['style'].upper()}] {a['label']}" for a in triage_card['actions']]),
+            f"[bold green]INTERACTIVE ACTIONS:[/bold green]\n"
+            + "\n".join([f"  [{a['style'].upper()}] {a['label']}" for a in triage_card["actions"]]),
             title="[bold cyan]ASI Interactive Card: Triage Detail View[/bold cyan]",
             border_style="magenta",
         )
@@ -195,7 +208,9 @@ def run_interactive_demo() -> None:
     # SCENARIO 1 (Cont): Logistics Slot Selection & CHC Doctor Roster
     # --------------------------------------------------------------------------
     console.print("\n[bold yellow]═══ STEP 4: CHC DOCTOR ROSTER & SLOT PICKER ═══[/bold yellow]")
-    console.print(f"[dim]LogisticsWorkerAgent querying CHC Alwar for '{dossier.assessment.recommended_specialty}'...[/dim]")
+    console.print(
+        f"[dim]LogisticsWorkerAgent querying CHC Alwar for '{dossier.assessment.recommended_specialty}'...[/dim]"
+    )
 
     slots_data = roster.get_available_slots(dossier.assessment.recommended_specialty)
     slot_card = make_slot_picker_card(
@@ -211,8 +226,8 @@ def run_interactive_demo() -> None:
             f"[bold]CLINIC:[/bold] {slot_card['header']['title']}\n"
             f"[bold]CONSULTANT:[/bold] {slot_card['sections'][0]['highlight']} ({slot_card['sections'][0]['subtitle']})\n"
             f"[bold]DEPOSIT POLICY:[/bold] {slot_card['sections'][1]['content']}\n\n"
-            f"[bold green]SELECTABLE OPD SLOTS:[/bold green]\n" +
-            "\n".join([f"  [BUTTON] {a['label']}" for a in slot_card['actions']]),
+            f"[bold green]SELECTABLE OPD SLOTS:[/bold green]\n"
+            + "\n".join([f"  [BUTTON] {a['label']}" for a in slot_card["actions"]]),
             title="[bold cyan]ASI Interactive Card: Slot Picker[/bold cyan]",
             border_style="blue",
         )
@@ -220,14 +235,18 @@ def run_interactive_demo() -> None:
 
     # Patient selects Slot 1 (10:00 AM)
     selected_slot_id = slots_data["slots"][0]["slot_id"]
-    console.print(f"\n[green]👉 User clicked button:[/green] [bold]{slots_data['slots'][0]['time']}[/bold]")
+    console.print(
+        f"\n[green]👉 User clicked button:[/green] [bold]{slots_data['slots'][0]['time']}[/bold]"
+    )
 
     time.sleep(1)
 
     # --------------------------------------------------------------------------
     # SCENARIO 1 (Cont): 0.5 FET Anti-No-Show Escrow Lock
     # --------------------------------------------------------------------------
-    console.print("\n[bold yellow]═══ STEP 5: FETCH.AI PAYMENT PROTOCOL (ANTI-NO-SHOW ESCROW) ═══[/bold yellow]")
+    console.print(
+        "\n[bold yellow]═══ STEP 5: FETCH.AI PAYMENT PROTOCOL (ANTI-NO-SHOW ESCROW) ═══[/bold yellow]"
+    )
     console.print("[dim]EscrowWorkerAgent locking 0.5 FET refundable deposit...[/dim]")
 
     # Book slot in SQLite
@@ -245,7 +264,9 @@ def run_interactive_demo() -> None:
     # Lock simulated escrow
     sim_lock_tx = f"sim_tx_{Config.ESCROW_DEPOSIT_FET}fet_{uuid.uuid4().hex[:12]}"
     roster.lock_escrow_deposit(ticket_id, sim_lock_tx)
-    console.print("[bold green]🔒 ESCROW LOCKED (Simulation):[/bold green] [SIMULATED - PAYMENT_MODE=simulation] 0.5 FET committed in SQLite escrow registry.")
+    console.print(
+        "[bold green]🔒 ESCROW LOCKED (Simulation):[/bold green] [SIMULATED - PAYMENT_MODE=simulation] 0.5 FET committed in SQLite escrow registry."
+    )
     console.print(f"[cyan]TxHash:[/cyan] {sim_lock_tx} | [cyan]Ticket ID:[/cyan] {ticket_id}")
 
     # Generate Patient Booking Receipt Card
@@ -264,7 +285,12 @@ def run_interactive_demo() -> None:
         Panel(
             f"[bold]STATUS:[/bold] {receipt_card['header']['title']}\n"
             f"[bold]TOKEN #:[/bold] {receipt_card['header']['badge']}\n\n"
-            + "\n".join([f"  • {fact['label']}: [bold]{fact['value']}[/bold]" for fact in receipt_card['sections'][0]['facts']])
+            + "\n".join(
+                [
+                    f"  • {fact['label']}: [bold]{fact['value']}[/bold]"
+                    for fact in receipt_card["sections"][0]["facts"]
+                ]
+            )
             + f"\n\n[bold yellow]ESCROW STATUS:[/bold yellow]\n{receipt_card['sections'][1]['content']}\n\n"
             + f"[bold]DIGITAL CHECK-IN QR:[/bold]\n{receipt_card['sections'][2]['qr_visual']}\n"
             + f"Payload: `{receipt_card['sections'][2]['qr_payload']}`",
@@ -278,7 +304,9 @@ def run_interactive_demo() -> None:
     # --------------------------------------------------------------------------
     # SCENARIO 1 (Cont): Doctor's High-Density English Markdown Dossier Output
     # --------------------------------------------------------------------------
-    console.print("\n[bold yellow]═══ STEP 6: DOCTOR'S 3-MINUTE OPD CLINICAL DOSSIER ═══[/bold yellow]")
+    console.print(
+        "\n[bold yellow]═══ STEP 6: DOCTOR'S 3-MINUTE OPD CLINICAL DOSSIER ═══[/bold yellow]"
+    )
     console.print(f"[cyan]Saved at:[/cyan] {saved['md_path']}")
     console.print(f"[cyan]Structured JSON at:[/cyan] {saved['json_path']}\n")
 
@@ -298,10 +326,16 @@ def run_interactive_demo() -> None:
     # --------------------------------------------------------------------------
     # SCENARIO 1 (Cont): Physical Clinic Check-In & 0.5 FET Escrow Refund
     # --------------------------------------------------------------------------
-    console.print("\n[bold yellow]═══ STEP 7: CLINIC DESK CHECK-IN & ESCROW SETTLEMENT ═══[/bold yellow]")
-    console.print(f"[dim]Patient arrives at CHC Alwar. Dispensary health worker scans QR token '{ticket_id}'...[/dim]")
+    console.print(
+        "\n[bold yellow]═══ STEP 7: CLINIC DESK CHECK-IN & ESCROW SETTLEMENT ═══[/bold yellow]"
+    )
+    console.print(
+        f"[dim]Patient arrives at CHC Alwar. Dispensary health worker scans QR token '{ticket_id}'...[/dim]"
+    )
 
-    release_resp = execute_patient_checkin(ticket_id=ticket_id, scanned_by="alwar_chc_reception_desk")
+    release_resp = execute_patient_checkin(
+        ticket_id=ticket_id, scanned_by="alwar_chc_reception_desk"
+    )
 
     console.print(
         Panel.fit(
@@ -319,9 +353,11 @@ def run_interactive_demo() -> None:
     # SCENARIO 2: Emergency Red-Flag Tripwire Test
     # --------------------------------------------------------------------------
     console.print("\n" + "=" * 80)
-    console.print("\n[bold red]═══ SCENARIO 2: EMERGENCY TRIPWIRE (CRITICAL RED FLAG TEST) ═══[/bold red]")
+    console.print(
+        "\n[bold red]═══ SCENARIO 2: EMERGENCY TRIPWIRE (CRITICAL RED FLAG TEST) ═══[/bold red]"
+    )
     emergency_text = "मरीज को अचानक सीने में बहुत तेज दर्द हो रहा है और सांस लेने में भारी तकलीफ है।"
-    console.print(f"[bold cyan]Patient Input:[/bold cyan] [italic]\"{emergency_text}\"[/italic]")
+    console.print(f'[bold cyan]Patient Input:[/bold cyan] [italic]"{emergency_text}"[/italic]')
 
     em_dossier, em_summary, em_is_emergency, em_reasons = vlm.analyze_case(
         session_id="session_emergency_test",
@@ -333,7 +369,9 @@ def run_interactive_demo() -> None:
     # Real clinical safety verification
     assert em_is_emergency, "CRITICAL ERROR: Emergency tripwire failed to detect life threat!"
     assert len(em_reasons) >= 1, "CRITICAL ERROR: Emergency reasons list must not be empty!"
-    assert not any("Critical red flag symptoms detected" in r for r in em_reasons), "Generic placeholder reason detected!"
+    assert not any("Critical red flag symptoms detected" in r for r in em_reasons), (
+        "Generic placeholder reason detected!"
+    )
 
     emergency_card = make_emergency_sos_card(em_reasons)
 
@@ -342,11 +380,11 @@ def run_interactive_demo() -> None:
             f"[bold white on red] {emergency_card['header']['title']} [/bold white on red]\n"
             f"[bold red]BADGE:[/bold red] {emergency_card['header']['badge']}\n\n"
             f"[bold]DETECTED LIFE-THREATENING SIGNS:[/bold]\n"
-            + "\n".join([f"  🚨 {r}" for r in emergency_card['sections'][0]['items']])
+            + "\n".join([f"  🚨 {r}" for r in emergency_card["sections"][0]["items"]])
             + f"\n\n[bold]DIRECTIVES:[/bold]\n{emergency_card['sections'][1]['content']}\n\n"
             + f"[bold]FIRST AID:[/bold]\n{emergency_card['sections'][2]['content']}\n\n"
             + "[bold red]ACTIONS:[/bold red]\n"
-            + "\n".join([f"  [EMERGENCY BUTTON] {a['label']}" for a in emergency_card['actions']]),
+            + "\n".join([f"  [EMERGENCY BUTTON] {a['label']}" for a in emergency_card["actions"]]),
             title="[bold red]ASI Interactive Card: 108 Emergency SOS[/bold red]",
             border_style="red",
         )
@@ -355,7 +393,9 @@ def run_interactive_demo() -> None:
     # --------------------------------------------------------------------------
     # SCENARIO 3: Real-Data Geospatial Tool (OpenStreetMap Overpass CHC Locator)
     # --------------------------------------------------------------------------
-    console.print("\n[bold yellow]═══ STEP 8: REAL-DATA GEOSPATIAL TOOL (OPENSTREETMAP OVERPASS CHC LOCATOR) ═══[/bold yellow]")
+    console.print(
+        "\n[bold yellow]═══ STEP 8: REAL-DATA GEOSPATIAL TOOL (OPENSTREETMAP OVERPASS CHC LOCATOR) ═══[/bold yellow]"
+    )
     chcs = geo.find_nearest_chc(latitude=27.5530, longitude=76.6346, max_results=2)
     for c in chcs:
         console.print(
@@ -370,7 +410,9 @@ def run_interactive_demo() -> None:
         )
 
     console.print("\n" + "=" * 80)
-    console.print("[bold green]✅ All CareRoute simulation scenarios successfully verified![/bold green]\n")
+    console.print(
+        "[bold green]✅ All CareRoute simulation scenarios successfully verified![/bold green]\n"
+    )
 
 
 def run_health_check() -> None:

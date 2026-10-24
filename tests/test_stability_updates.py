@@ -93,7 +93,9 @@ def test_llm_client_resilient_parsing_of_fenced_response():
     """Verify LLMClient._parse_and_validate_json succeeds with markdown fences and conversational noise."""
     client = LLMClient()
     raw_json_str = json.dumps(SAMPLE_NESTED_PAYLOAD)
-    noisy_llm_output = f"Certainly! Here is the SOAP dossier:\n```json\n{raw_json_str}\n```\nHope this is helpful!"
+    noisy_llm_output = (
+        f"Certainly! Here is the SOAP dossier:\n```json\n{raw_json_str}\n```\nHope this is helpful!"
+    )
 
     dossier, summary = client._parse_and_validate_json(
         raw_text=noisy_llm_output,
@@ -116,13 +118,16 @@ def test_llm_client_resilient_parsing_of_fenced_response():
 # 2. STRICT OVERPASS API TIMEOUT & FALLBACK TESTS
 # ==============================================================================
 
+
 def test_geo_service_fast_fallback_on_timeout(tmp_path):
     """Verify GeoService fails fast and returns local fallback clinic records on network timeout."""
     geo = GeoService(cache_dir=tmp_path, request_timeout=2.5)
 
     start_time = time.time()
     # Mock requests.post to simulate immediate timeout exception
-    with patch("requests.post", side_effect=requests.Timeout("Overpass gateway timeout after 2.5s")):
+    with patch(
+        "requests.post", side_effect=requests.Timeout("Overpass gateway timeout after 2.5s")
+    ):
         chcs = geo.find_nearest_chc(latitude=27.5530, longitude=76.6346, max_results=3)
     elapsed = time.time() - start_time
 
@@ -151,6 +156,7 @@ def test_geo_service_fast_fallback_on_request_exception(tmp_path):
 # ==============================================================================
 # 3. ACUTE HIGH-ACUITY RESPIRATORY SAFETY CHECK TESTS
 # ==============================================================================
+
 
 def test_acute_respiratory_risk_detection_hindi():
     """Verify cough + breathlessness trips acute high-acuity respiratory risk."""
@@ -200,7 +206,9 @@ def test_vlm_escalates_acute_cough_with_breathlessness():
 
     # Urgent clinical priority (Urgent Same-Day)
     assert dossier.assessment.triage_urgency in (TriageUrgency.HIGH, TriageUrgency.EMERGENCY)
-    assert any("Pneumonia" in d or "Respiratory" in d for d in dossier.assessment.differential_diagnoses)
+    assert any(
+        "Pneumonia" in d or "Respiratory" in d for d in dossier.assessment.differential_diagnoses
+    )
     # Zero vitals fabrication preserved
     assert dossier.objective.vitals_reported == {}
     assert "तीव्र श्वसन" in summary or "आपातकालीन" in summary

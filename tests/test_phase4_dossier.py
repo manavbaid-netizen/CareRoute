@@ -79,7 +79,9 @@ def test_dossier_pydantic_v2_roundtrip(dossier_service, sample_dossier):
     assert loaded.dossier_id == sample_dossier.dossier_id
     assert loaded.patient_name == sample_dossier.patient_name
     assert loaded.assessment.triage_urgency == TriageUrgency.HIGH
-    assert loaded.assessment.recommended_specialty == sample_dossier.assessment.recommended_specialty
+    assert (
+        loaded.assessment.recommended_specialty == sample_dossier.assessment.recommended_specialty
+    )
     assert loaded.engine == sample_dossier.engine
 
 
@@ -142,6 +144,7 @@ async def test_agent_driven_dossier_flow():
 
     # Step 2: Drive booking through Logistics Worker using REAL dossier_id
     from agents.logistics_worker import roster_service
+
     roster_service.reset_slot("ALW_CHEST_1000")
 
     logi_ctx = MagicMock()

@@ -30,9 +30,7 @@ from services.health_check import check_system_health
 
 def test_correlation_id_presence():
     """Verify all worker IPC models include correlation_id for distributed tracing."""
-    t_req = TriageAnalysisRequest(
-        session_id="user1", patient_id="p1", text_transcript="cough"
-    )
+    t_req = TriageAnalysisRequest(session_id="user1", patient_id="p1", text_transcript="cough")
     assert t_req.correlation_id is not None
     assert len(t_req.correlation_id) == 8
 
@@ -185,7 +183,14 @@ def test_geo_service_caching(tmp_path):
     """Verify GeoService writes to and reads from persistent cache."""
     geo = GeoService(cache_dir=tmp_path)
     mock_data = [
-        {"id": "c1", "name": "Cached CHC", "latitude": 27.5, "longitude": 76.6, "distance_km": 2.5, "source": "osm_overpass_live"}
+        {
+            "id": "c1",
+            "name": "Cached CHC",
+            "latitude": 27.5,
+            "longitude": 76.6,
+            "distance_km": 2.5,
+            "source": "osm_overpass_live",
+        }
     ]
 
     with patch.object(geo, "query_overpass_chcs", return_value=mock_data):

@@ -1,4 +1,5 @@
 """CareRoute Data Models & Schemas."""
+
 from models.cards import (
     make_booking_receipt_card,
     make_emergency_sos_card,

@@ -31,9 +31,7 @@ async def startup_handler(ctx: Context) -> None:
 
 
 @diagnostic_worker.on_message(model=TriageAnalysisRequest)
-async def handle_triage_request(
-    ctx: Context, sender: str, msg: TriageAnalysisRequest
-) -> None:
+async def handle_triage_request(ctx: Context, sender: str, msg: TriageAnalysisRequest) -> None:
     """
     Handle triage and clinical synthesis request from DispatcherAgent.
     Runs VLM multimodal triage, generates Hindi guidance, and formats the English SOAP dossier.
@@ -41,7 +39,7 @@ async def handle_triage_request(
     ctx.logger.info(
         f"📋 Received clinical triage request for session {msg.session_id} (Patient: {msg.patient_name})"
     )
-    ctx.logger.debug(f"🗣️ Raw Vernacular Transcript: \"{msg.text_transcript[:60]}...\"")
+    ctx.logger.debug(f'🗣️ Raw Vernacular Transcript: "{msg.text_transcript[:60]}..."')
 
     # Execute Clinical Reasoning & SOAP Generation via VLM Service
     dossier, hindi_summary, is_emergency, emergency_reasons = vlm_service.analyze_case(

@@ -17,8 +17,10 @@ from config import Config
 # Pydantic v2 Models for ASI:One Interactive Cards
 # ------------------------------------------------------------------------------
 
+
 class CardAction(BaseModel):
     """Interactive button or CTA element on an ASI:One card."""
+
     type: str = "button"
     action_id: str
     label: str
@@ -29,18 +31,21 @@ class CardAction(BaseModel):
 
 class CardHeader(BaseModel):
     """Title and badge banner for an interactive card."""
+
     title: str
     badge: str | None = None
 
 
 class CardFact(BaseModel):
     """Key-value datum for receipt or summary sections."""
+
     label: str
     value: str
 
 
 class CardSection(BaseModel):
     """Content section within an interactive card."""
+
     title: str | None = None
     highlight: str | None = None
     subtitle: str | None = None
@@ -53,6 +58,7 @@ class CardSection(BaseModel):
 
 class CardTheme(BaseModel):
     """Visual branding theme for ASI:One card drawer."""
+
     primary_color: str = "#2563EB"
     badge_bg: str | None = None
     badge_text: str | None = None
@@ -60,6 +66,7 @@ class CardTheme(BaseModel):
 
 class InteractiveCard(BaseModel):
     """Official ASI:One Interactive Card schema."""
+
     card_type: str
     version: str = "1.0"
     theme: CardTheme = Field(default_factory=CardTheme)
@@ -71,6 +78,7 @@ class InteractiveCard(BaseModel):
 # ------------------------------------------------------------------------------
 # Plain-Text & Accessible Markdown Fallback Renderer
 # ------------------------------------------------------------------------------
+
 
 def card_to_markdown(card: dict[str, Any]) -> str:
     """
@@ -124,6 +132,7 @@ def card_to_markdown(card: dict[str, Any]) -> str:
 # Action Parsing & Fallback Extraction
 # ------------------------------------------------------------------------------
 
+
 def parse_card_action(user_text: str) -> dict[str, Any] | None:
     """
     Parse an incoming client message to determine if it is an interactive
@@ -153,6 +162,7 @@ def parse_card_action(user_text: str) -> dict[str, Any] | None:
 # ------------------------------------------------------------------------------
 # ACP Message Builder with Native Interactive Card & Text Fallback
 # ------------------------------------------------------------------------------
+
 
 def create_card_chat(
     text: str,
@@ -207,6 +217,7 @@ def create_card_chat(
 # Card Builders (Optimized with short mobile labels)
 # ------------------------------------------------------------------------------
 
+
 def make_triage_detail_card(
     urgency: str,
     specialty_hi: str,
@@ -220,7 +231,11 @@ def make_triage_detail_card(
     """
     is_urgent = "High" in urgency or "Critical" in urgency or "Emergency" in urgency
     theme_color = "#EF4444" if is_urgent else ("#F59E0B" if "Moderate" in urgency else "#10B981")
-    badge_label = "प्राथमिकता (Priority)" if "Moderate" in urgency else ("अति आवश्यक (Urgent)" if is_urgent else "सामान्य (Routine)")
+    badge_label = (
+        "प्राथमिकता (Priority)"
+        if "Moderate" in urgency
+        else ("अति आवश्यक (Urgent)" if is_urgent else "सामान्य (Routine)")
+    )
 
     differentials_list = differentials or ["Clinical assessment pending physical exam"]
 
@@ -229,7 +244,9 @@ def make_triage_detail_card(
         "version": "1.0",
         "theme": {
             "primary_color": theme_color,
-            "badge_bg": "#FEF3C7" if "Moderate" in urgency else ("#FEE2E2" if is_urgent else "#D1FAE5"),
+            "badge_bg": "#FEF3C7"
+            if "Moderate" in urgency
+            else ("#FEE2E2" if is_urgent else "#D1FAE5"),
             "badge_text": theme_color,
         },
         "header": {

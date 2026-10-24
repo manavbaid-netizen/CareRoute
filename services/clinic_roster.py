@@ -16,6 +16,7 @@ logger = logging.getLogger("CareRoute.ClinicRoster")
 
 class Specialty(str, Enum):
     """Controlled medical specialties supported across CHC telemedicine network."""
+
     PULMONOLOGY = "Pulmonology / Chest & Respiratory Medicine"
     DERMATOLOGY = "Dermatology & Venereology"
     GENERAL_MEDICINE = "General Medicine & Primary Health"
@@ -206,7 +207,9 @@ class ClinicRosterService:
             if count > 0:
                 return
 
-            clinic_name = self.roster_data.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
+            clinic_name = self.roster_data.get(
+                "clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)"
+            )
             specialties = self.roster_data.get("specialties", {})
             for spec_key, doc in specialties.items():
                 for s in doc.get("slots", []):
@@ -296,14 +299,16 @@ class ClinicRosterService:
             slots = []
             for r in rows:
                 rem = max(0, r["capacity"] - r["booked_count"])
-                slots.append({
-                    "slot_id": r["slot_id"],
-                    "time": r["slot_time"],
-                    "slot_date": slot_date,
-                    "capacity": r["capacity"],
-                    "booked_count": r["booked_count"],
-                    "remaining_capacity": rem,
-                })
+                slots.append(
+                    {
+                        "slot_id": r["slot_id"],
+                        "time": r["slot_time"],
+                        "slot_date": slot_date,
+                        "capacity": r["capacity"],
+                        "booked_count": r["booked_count"],
+                        "remaining_capacity": rem,
+                    }
+                )
 
             return {
                 "clinic_name": clinic_name,
@@ -344,7 +349,9 @@ class ClinicRosterService:
             )
             slot_row = cursor.fetchone()
             if not slot_row:
-                raise ValueError(f"SLOT_NOT_FOUND: Slot '{slot_id}' not found for date '{slot_date}'.")
+                raise ValueError(
+                    f"SLOT_NOT_FOUND: Slot '{slot_id}' not found for date '{slot_date}'."
+                )
 
             # 2. Atomic capacity decrement
             cursor.execute(
@@ -368,7 +375,9 @@ class ClinicRosterService:
             # 3. Create appointment and escrow records in transaction
             ticket_id = f"CR-ALW-{uuid.uuid4().hex[:6].upper()}"
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            qr_payload = f"CAREROUTE:{ticket_id}:{slot_row[6]}:{slot_row[5]}"  # clinic_name, room_no
+            qr_payload = (
+                f"CAREROUTE:{ticket_id}:{slot_row[6]}:{slot_row[5]}"  # clinic_name, room_no
+            )
 
             cursor.execute(
                 """

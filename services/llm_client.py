@@ -31,7 +31,9 @@ CLINICAL_DISCLAIMER_EN = (
 )
 
 HONEST_VISION_NOTE_HI = "फोटो का विश्लेषण अभी उपलब्ध नहीं है, डॉक्टर ओपीडी में सीधे देखकर जांच करेंगे।"
-HONEST_VISION_NOTE_EN = "Image analysis not available; direct in-person physical inspection required at CHC."
+HONEST_VISION_NOTE_EN = (
+    "Image analysis not available; direct in-person physical inspection required at CHC."
+)
 
 SYSTEM_PROMPT = """You are the Clinical Intelligence Engine for CareRoute, a rural telehealth intake bridge in India.
 Your task is to analyze the patient's vernacular Hindi/Hinglish/English narrative and produce a structured JSON clinical intake dossier for the Community Health Center (CHC) Medical Officer.
@@ -151,11 +153,14 @@ class LLMClient:
         if Config.ASI1_API_KEY and not Config.USE_MOCK_VLM:
             try:
                 from openai import OpenAI
+
                 self.asi1_client = OpenAI(
                     base_url=Config.ASI1_BASE_URL,
                     api_key=Config.ASI1_API_KEY,
                 )
-                logger.info(f"Initialized ASI:One LLM client (Model: {Config.ASI1_MODEL}) at {Config.ASI1_BASE_URL}")
+                logger.info(
+                    f"Initialized ASI:One LLM client (Model: {Config.ASI1_MODEL}) at {Config.ASI1_BASE_URL}"
+                )
             except Exception as e:
                 logger.warning(f"Could not initialize ASI:One client: {e}")
 
@@ -163,6 +168,7 @@ class LLMClient:
         if Config.GEMINI_API_KEY and not Config.USE_MOCK_VLM:
             try:
                 from google import genai
+
                 self.gemini_client = genai.Client(api_key=Config.GEMINI_API_KEY)
                 logger.info("Initialized Google Gemini client.")
             except Exception as e:
@@ -172,6 +178,7 @@ class LLMClient:
         if Config.OPENAI_API_KEY and not Config.USE_MOCK_VLM:
             try:
                 from openai import OpenAI
+
                 self.openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
                 logger.info("Initialized OpenAI client.")
             except Exception as e:
@@ -198,8 +205,12 @@ class LLMClient:
             )
 
         # Step 1: If mock mode is explicitly forced or no external LLM clients are configured
-        if Config.USE_MOCK_VLM or (not self.asi1_client and not self.gemini_client and not self.openai_client):
-            logger.info("Using deterministic clinical fallback engine (no external LLM configured / mock mode active).")
+        if Config.USE_MOCK_VLM or (
+            not self.asi1_client and not self.gemini_client and not self.openai_client
+        ):
+            logger.info(
+                "Using deterministic clinical fallback engine (no external LLM configured / mock mode active)."
+            )
             return self._run_deterministic_fallback(
                 session_id, patient_id, patient_name, text_transcript, image_data, image_type
             )
@@ -207,7 +218,9 @@ class LLMClient:
         # Step 2: Try ASI:One LLM
         if self.asi1_client:
             try:
-                logger.info(f"Dispatching clinical synthesis to ASI:One LLM ({Config.ASI1_MODEL})...")
+                logger.info(
+                    f"Dispatching clinical synthesis to ASI:One LLM ({Config.ASI1_MODEL})..."
+                )
                 res = self._call_openai_compatible(
                     client=self.asi1_client,
                     model=Config.ASI1_MODEL,
@@ -295,25 +308,41 @@ class LLMClient:
         # First attempt
         raw_response = self._invoke_openai_chat(client, model, messages)
         dossier, hindi_summary = self._parse_and_validate_json(
-            raw_response, engine_name, session_id, patient_id, patient_name, text_transcript, has_vision
+            raw_response,
+            engine_name,
+            session_id,
+            patient_id,
+            patient_name,
+            text_transcript,
+            has_vision,
         )
 
         # Retry ONCE if parsing or validation failed
         if dossier is None:
-            logger.warning("LLM output validation failed on first attempt. Retrying with error correction...")
+            logger.warning(
+                "LLM output validation failed on first attempt. Retrying with error correction..."
+            )
             retry_messages = list(messages)
             retry_messages.append({"role": "assistant", "content": raw_response or ""})
-            retry_messages.append({
-                "role": "user",
-                "content": (
-                    "The previous response was not strictly valid JSON or violated the clinical schema. "
-                    "Please output strictly valid JSON matching the schema, with no markdown fences, "
-                    "no fabricated vitals, and no drug prescriptions."
-                ),
-            })
+            retry_messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "The previous response was not strictly valid JSON or violated the clinical schema. "
+                        "Please output strictly valid JSON matching the schema, with no markdown fences, "
+                        "no fabricated vitals, and no drug prescriptions."
+                    ),
+                }
+            )
             retry_raw = self._invoke_openai_chat(client, model, retry_messages)
             dossier, hindi_summary = self._parse_and_validate_json(
-                retry_raw, engine_name, session_id, patient_id, patient_name, text_transcript, has_vision
+                retry_raw,
+                engine_name,
+                session_id,
+                patient_id,
+                patient_name,
+                text_transcript,
+                has_vision,
             )
 
         if dossier is not None:
@@ -340,7 +369,9 @@ class LLMClient:
         image_type: str | None = None,
     ) -> tuple[ClinicalDossier, str, bool, list[str]] | None:
         """Call Google Gemini with structured prompt and validation."""
-        user_prompt = f"{SYSTEM_PROMPT}\n\nPatient Input: {text_transcript}\nPatient Name: {patient_name}"
+        user_prompt = (
+            f"{SYSTEM_PROMPT}\n\nPatient Input: {text_transcript}\nPatient Name: {patient_name}"
+        )
         has_vision = bool(image_data)
 
         response = self.gemini_client.models.generate_content(
@@ -349,7 +380,13 @@ class LLMClient:
         )
         raw_text = response.text or ""
         dossier, hindi_summary = self._parse_and_validate_json(
-            raw_text, "Gemini (gemini-2.5-flash)", session_id, patient_id, patient_name, text_transcript, has_vision
+            raw_text,
+            "Gemini (gemini-2.5-flash)",
+            session_id,
+            patient_id,
+            patient_name,
+            text_transcript,
+            has_vision,
         )
         if dossier:
             return dossier, hindi_summary, False, []
@@ -397,13 +434,15 @@ class LLMClient:
             ocr_meds = []
             for m in obj_raw.get("ocr_prescriptions", []):
                 if isinstance(m, dict) and "drug_name" in m:
-                    ocr_meds.append(MedicationEntry(
-                        drug_name=m.get("drug_name", ""),
-                        dosage=m.get("dosage", "As advised"),
-                        frequency=m.get("frequency", "OD"),
-                        duration=m.get("duration"),
-                        confidence=float(m.get("confidence", 0.85)),
-                    ))
+                    ocr_meds.append(
+                        MedicationEntry(
+                            drug_name=m.get("drug_name", ""),
+                            dosage=m.get("dosage", "As advised"),
+                            frequency=m.get("frequency", "OD"),
+                            duration=m.get("duration"),
+                            confidence=float(m.get("confidence", 0.85)),
+                        )
+                    )
 
             # Honest vision handling
             photo_findings = []
@@ -413,24 +452,32 @@ class LLMClient:
 
             urgency = parse_urgency(assess_raw.get("triage_urgency", "Low"))
             specialty = assess_raw.get("recommended_specialty", "General Medicine")
-            specialty_hi = assess_raw.get("recommended_specialty_hindi", "सामान्य चिकित्सा (General Medicine OPD)")
+            specialty_hi = assess_raw.get(
+                "recommended_specialty_hindi", "सामान्य चिकित्सा (General Medicine OPD)"
+            )
             diffs = assess_raw.get("differential_diagnoses", ["1. Acute symptomatic presentation"])
             if not isinstance(diffs, list) or len(diffs) == 0:
-                diffs = ["1. Acute symptomatic presentation; needs clinical evaluation by CHC Medical Officer"]
+                diffs = [
+                    "1. Acute symptomatic presentation; needs clinical evaluation by CHC Medical Officer"
+                ]
 
-            investigations = plan_raw.get("suggested_investigations", ["Routine vitals check by Medical Officer"])
+            investigations = plan_raw.get(
+                "suggested_investigations", ["Routine vitals check by Medical Officer"]
+            )
             if not isinstance(investigations, list):
                 investigations = [str(investigations)]
 
             advice_hi = plan_raw.get(
                 "interim_patient_advice_hindi",
-                "पर्याप्त आराम करें और पानी पिएं। ओपीडी में डॉक्टर से परामर्श लें।"
+                "पर्याप्त आराम करें और पानी पिएं। ओपीडी में डॉक्टर से परामर्श लें।",
             )
             advice_en = plan_raw.get(
                 "interim_patient_advice_english",
-                "Maintain oral hydration and rest. Attend CHC OPD for in-person medical evaluation."
+                "Maintain oral hydration and rest. Attend CHC OPD for in-person medical evaluation.",
             )
-            red_flags = plan_raw.get("red_flag_warnings", ["Sudden worsening of symptoms or high fever"])
+            red_flags = plan_raw.get(
+                "red_flag_warnings", ["Sudden worsening of symptoms or high fever"]
+            )
             if not isinstance(red_flags, list):
                 red_flags = [str(red_flags)]
 
@@ -444,9 +491,15 @@ class LLMClient:
                 disclaimer=CLINICAL_DISCLAIMER_EN,
                 subjective=SubjectiveSOAP(
                     patient_chief_complaint_hindi=text_transcript,
-                    chief_complaint_english=subj_raw.get("chief_complaint_english", text_transcript),
-                    history_of_present_illness=subj_raw.get("history_of_present_illness", text_transcript),
-                    symptom_duration=subj_raw.get("symptom_duration", "Not specified / Pending clarification"),
+                    chief_complaint_english=subj_raw.get(
+                        "chief_complaint_english", text_transcript
+                    ),
+                    history_of_present_illness=subj_raw.get(
+                        "history_of_present_illness", text_transcript
+                    ),
+                    symptom_duration=subj_raw.get(
+                        "symptom_duration", "Not specified / Pending clarification"
+                    ),
                     associated_symptoms=subj_raw.get("associated_symptoms", []),
                     past_medical_history=past_history,
                 ),
@@ -461,7 +514,9 @@ class LLMClient:
                     differential_diagnoses=diffs,
                     recommended_specialty=specialty,
                     recommended_specialty_hindi=specialty_hi,
-                    clinical_rationale=assess_raw.get("clinical_rationale", "Clinical triage assessment."),
+                    clinical_rationale=assess_raw.get(
+                        "clinical_rationale", "Clinical triage assessment."
+                    ),
                 ),
                 plan=PlanSOAP(
                     suggested_investigations=investigations,
@@ -533,13 +588,17 @@ class LLMClient:
             ),
             assessment=AssessmentSOAP(
                 triage_urgency=TriageUrgency.LOW,
-                differential_diagnoses=["1. Symptomatic presentation: needs clinical evaluation by CHC Medical Officer"],
+                differential_diagnoses=[
+                    "1. Symptomatic presentation: needs clinical evaluation by CHC Medical Officer"
+                ],
                 recommended_specialty="General Medicine",
                 recommended_specialty_hindi="सामान्य चिकित्सा (General Medicine OPD)",
                 clinical_rationale="Outpatient general medical presentation.",
             ),
             plan=PlanSOAP(
-                suggested_investigations=["Routine vitals and physical examination by Medical Officer"],
+                suggested_investigations=[
+                    "Routine vitals and physical examination by Medical Officer"
+                ],
                 interim_patient_advice_hindi="पर्याप्त आराम करें और पानी पिएं। ओपीडी में डॉक्टर से परामर्श लें।",
                 interim_patient_advice_english="Maintain hydration and rest. Consult CHC doctor.",
                 red_flag_warnings=["Sudden worsening of symptoms"],

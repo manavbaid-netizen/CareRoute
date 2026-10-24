@@ -25,42 +25,44 @@ from services.llm_client import (
 )
 from services.vlm_service import VLMService
 
-SAMPLE_VALID_LLM_JSON = json.dumps({
-    "subjective": {
-        "chief_complaint_english": "Patient reports pain in both knees while walking for 1 month.",
-        "history_of_present_illness": "Insidious onset of bilateral knee pain exacerbated by weight-bearing.",
-        "symptom_duration": "1 month",
-        "associated_symptoms": ["Joint stiffness in morning"],
-        "past_medical_history": [],
-    },
-    "objective": {
-        "vitals_reported": {},
-        "visual_photo_findings": [],
-        "ocr_prescriptions": [],
-        "clinical_signs_summary": "Chronic joint pain without systemic signs.",
-    },
-    "assessment": {
-        "triage_urgency": "Low (Routine OPD / नियमित ओपीडी)",
-        "differential_diagnoses": [
-            "1. Primary Osteoarthritis (Bilateral knees)",
-            "2. Patellofemoral Pain Syndrome",
-            "3. Tendinitis / Overuse strain",
-        ],
-        "recommended_specialty": "Orthopedics & Joint Care",
-        "recommended_specialty_hindi": "हड्डी एवं जोड़ रोग विशेषज्ञ",
-        "clinical_rationale": "Age-related chronic knee pain exacerbated by walking suggests degenerative joint change.",
-    },
-    "plan": {
-        "suggested_investigations": [
-            "X-Ray Bilateral Knees (AP and Lateral weight-bearing views)",
-            "Serum Uric Acid and ESR",
-        ],
-        "interim_patient_advice_hindi": "सीढ़ियां चढ़ने से बचें और घुटनों पर अत्यधिक दबाव न डालें। ओपीडी में डॉक्टर से परामर्श लें।",
-        "interim_patient_advice_english": "Avoid heavy weight-bearing and high-impact activities. Consult CHC orthopedics OPD.",
-        "red_flag_warnings": ["Sudden hot red swelling or fever"],
-    },
-    "hindi_summary": "आपके घुटनों के दर्द के आधार पर हमने सीएचसी के **हड्डी एवं जोड़ रोग विशेषज्ञ** हेतु सारांश तैयार किया है।",
-})
+SAMPLE_VALID_LLM_JSON = json.dumps(
+    {
+        "subjective": {
+            "chief_complaint_english": "Patient reports pain in both knees while walking for 1 month.",
+            "history_of_present_illness": "Insidious onset of bilateral knee pain exacerbated by weight-bearing.",
+            "symptom_duration": "1 month",
+            "associated_symptoms": ["Joint stiffness in morning"],
+            "past_medical_history": [],
+        },
+        "objective": {
+            "vitals_reported": {},
+            "visual_photo_findings": [],
+            "ocr_prescriptions": [],
+            "clinical_signs_summary": "Chronic joint pain without systemic signs.",
+        },
+        "assessment": {
+            "triage_urgency": "Low (Routine OPD / नियमित ओपीडी)",
+            "differential_diagnoses": [
+                "1. Primary Osteoarthritis (Bilateral knees)",
+                "2. Patellofemoral Pain Syndrome",
+                "3. Tendinitis / Overuse strain",
+            ],
+            "recommended_specialty": "Orthopedics & Joint Care",
+            "recommended_specialty_hindi": "हड्डी एवं जोड़ रोग विशेषज्ञ",
+            "clinical_rationale": "Age-related chronic knee pain exacerbated by walking suggests degenerative joint change.",
+        },
+        "plan": {
+            "suggested_investigations": [
+                "X-Ray Bilateral Knees (AP and Lateral weight-bearing views)",
+                "Serum Uric Acid and ESR",
+            ],
+            "interim_patient_advice_hindi": "सीढ़ियां चढ़ने से बचें और घुटनों पर अत्यधिक दबाव न डालें। ओपीडी में डॉक्टर से परामर्श लें।",
+            "interim_patient_advice_english": "Avoid heavy weight-bearing and high-impact activities. Consult CHC orthopedics OPD.",
+            "red_flag_warnings": ["Sudden hot red swelling or fever"],
+        },
+        "hindi_summary": "आपके घुटनों के दर्द के आधार पर हमने सीएचसी के **हड्डी एवं जोड़ रोग विशेषज्ञ** हेतु सारांश तैयार किया है।",
+    }
+)
 
 
 @pytest.fixture
