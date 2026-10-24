@@ -137,6 +137,14 @@ class Config(metaclass=ConfigMeta):
         "yes",
     )
 
+    # IPC & Swarm Execution Configuration
+    WORKER_IPC_TIMEOUT: float = float(os.getenv("WORKER_IPC_TIMEOUT", "10.0"))
+    DIRECT_DISPATCH_MODE: bool = os.getenv("DIRECT_DISPATCH_MODE", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
     # Data Storage Paths
     DATA_STORAGE_DIR: Path = BASE_DIR / os.getenv("DATA_STORAGE_DIR", "data")
     DATA_DIR: Path = DATA_STORAGE_DIR

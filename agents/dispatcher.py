@@ -269,7 +269,11 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
         if isinstance(item, ResourceContent) or getattr(item, "type", None) == "resource":
             resource = item.resource if not isinstance(item.resource, list) else item.resource[0]
             uri = getattr(resource, "uri", "")
-            if is_worker_online(Config.DIAGNOSTIC_PORT) and WORKER_ADDRESSES.get("diagnostic"):
+            if (
+                not Config.DIRECT_DISPATCH_MODE
+                and is_worker_online(Config.DIAGNOSTIC_PORT)
+                and WORKER_ADDRESSES.get("diagnostic")
+            ):
                 session["state"] = "STATE_ANALYZING"
                 session["pending_request"] = {
                     "type": "triage",
@@ -604,7 +608,11 @@ async def _process_user_text(
             specialty = action_data.get(
                 "specialty", session.get("recommended_specialty", "General Medicine")
             )
-            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+            if (
+                not Config.DIRECT_DISPATCH_MODE
+                and is_worker_online(Config.LOGISTICS_PORT)
+                and WORKER_ADDRESSES.get("logistics")
+            ):
                 session["state"] = "STATE_SLOT_SELECTED"
                 session["pending_request"] = {
                     "type": "slots",
@@ -642,7 +650,11 @@ async def _process_user_text(
                 await ctx.send(sender, create_text_chat(warn_text))
                 return
 
-            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+            if (
+                not Config.DIRECT_DISPATCH_MODE
+                and is_worker_online(Config.LOGISTICS_PORT)
+                and WORKER_ADDRESSES.get("logistics")
+            ):
                 session["pending_request"] = {
                     "type": "booking",
                     "sent_at": now,
@@ -712,7 +724,11 @@ async def _process_user_text(
                 }
                 session_store.save_session(sender, session)
 
-                if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+                if (
+                    not Config.DIRECT_DISPATCH_MODE
+                    and is_worker_online(Config.LOGISTICS_PORT)
+                    and WORKER_ADDRESSES.get("logistics")
+                ):
                     session["pending_request"] = {
                         "type": "booking",
                         "sent_at": now,
@@ -766,7 +782,11 @@ async def _process_user_text(
                 await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
                 return
 
-            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+            if (
+                not Config.DIRECT_DISPATCH_MODE
+                and is_worker_online(Config.LOGISTICS_PORT)
+                and WORKER_ADDRESSES.get("logistics")
+            ):
                 session["pending_request"] = {
                     "type": "booking",
                     "sent_at": time.time(),
@@ -808,7 +828,11 @@ async def _process_user_text(
         return
 
     # 5. Symptom narrative input -> route to Diagnostic Worker if online, else direct
-    if is_worker_online(Config.DIAGNOSTIC_PORT) and WORKER_ADDRESSES.get("diagnostic"):
+    if (
+        not Config.DIRECT_DISPATCH_MODE
+        and is_worker_online(Config.DIAGNOSTIC_PORT)
+        and WORKER_ADDRESSES.get("diagnostic")
+    ):
         session["state"] = "STATE_ANALYZING"
         session["pending_request"] = {
             "type": "triage",
@@ -952,7 +976,7 @@ async def handle_booking_commit_response(
         f"💳 Booking reserved for {msg.ticket_id}. Coordinating with EscrowWorkerAgent..."
     )
 
-    if WORKER_ADDRESSES["escrow"]:
+    if not Config.DIRECT_DISPATCH_MODE and WORKER_ADDRESSES["escrow"]:
         session["pending_request"] = {"type": "escrow", "sent_at": time.time(), "retries": 0}
         session_store.save_session(user_addr, session)
         await ctx.send(
@@ -1050,14 +1074,14 @@ async def request_timeout_watchdog(ctx: Context) -> None:
         cid = pending.get("correlation_id", "none")
         req_type = pending.get("type", "")
 
-        if elapsed > 5.0:  # 5 seconds timeout per attempt
+        if elapsed > Config.WORKER_IPC_TIMEOUT:
             retries = pending.get("retries", 0)
             if retries < 1:
                 pending["retries"] = retries + 1
                 pending["sent_at"] = now
                 session_store.save_session(user_addr, session)
-                ctx.logger.warning(
-                    f"⏱️ [CID: {cid}] Worker response timeout for {user_addr} (type: {req_type}). Retrying (attempt 2)..."
+                ctx.logger.info(
+                    f"⏱️ [CID: {cid}] Worker response delayed for {user_addr} (type: {req_type}). Retrying IPC request (attempt 2)..."
                 )
                 # Resend request based on type
                 if req_type == "triage" and WORKER_ADDRESSES["diagnostic"]:
@@ -1098,8 +1122,8 @@ async def request_timeout_watchdog(ctx: Context) -> None:
             else:
                 # Failed after retry -> graceful degradation with in-process self-healing
                 session["pending_request"] = None
-                ctx.logger.warning(
-                    f"⏱️ [CID: {cid}] Worker IPC request failed after retry for {user_addr} (type: {req_type}). "
+                ctx.logger.info(
+                    f"⚡ [CID: {cid}] Worker IPC request timed out for {user_addr} (type: {req_type}). "
                     f"Activating resilient in-process service execution..."
                 )
                 base_timeout_msg = (
