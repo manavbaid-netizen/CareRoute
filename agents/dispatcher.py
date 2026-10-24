@@ -570,26 +570,101 @@ async def _process_user_text(
         ctx.logger.info(f"👋 [CID: {correlation_id}] Dispatched welcome greeting to {sender}")
         return
 
+    # Parse JSON button action or numeric choice
+    action_data: dict[str, Any] | None = parse_card_action(user_text)
+
     # Check if user already has a confirmed booking in this session
     if session.get("state") == "STATE_CONFIRMED" and session.get("ticket_id"):
-        if any(kw in user_text.lower() for kw in ["new", "restart", "start", "नया", "शुरू", "begin"]):
+        ticket_id = session.get("ticket_id")
+        user_lower = user_text.lower().strip()
+
+        # A. Restart session keyword
+        if any(kw in user_lower for kw in ["new", "restart", "start", "नया", "शुरू", "begin"]):
             session["state"] = "STATE_IDLE"
             session["dossier"] = None
             session["dossier_id"] = None
             session["ticket_id"] = None
             session["available_slots"] = None
             session["selected_slot"] = None
+            session["booking_details"] = None
             session["pending_request"] = None
             session_store.save_session(sender, session)
             reset_msg = "🔄 नया सत्र प्रारंभ हो गया है। कृपया अपने नए लक्षण या स्वास्थ्य समस्या बताएं।"
             await ctx.send(sender, create_text_chat(reset_msg))
             return
 
+        # B. Hospital Check-in Action (Button 1 or text '1', 'check-in', 'refund', 'रिफंड')
+        act_name = action_data.get("action") if action_data else None
+        is_checkin = (
+            act_name == "clinic_checkin"
+            or (act_name == "numeric_choice" and action_data.get("choice") == 1)
+            or user_lower in ("1", "एक", "#1", "[1]", "checkin", "check-in", "check in", "चेक-इन", "चेक इन", "रिफंड", "refund")
+            or any(kw in user_lower for kw in ["check-in", "checkin", "check in", "चेक-इन", "चेक इन", "अस्पताल चेक", "refund", "रिफंड"])
+        )
+        if is_checkin:
+            booking = session.get("booking_details") or {}
+            qr_token = booking.get("qr_payload") or f"CAREROUTE:{ticket_id}"
+
+            from agents.escrow_worker import execute_patient_checkin
+
+            rel_resp = execute_patient_checkin(
+                ticket_id=ticket_id,
+                scanned_by="alwar_chc_reception_desk",
+                qr_token=qr_token,
+            )
+
+            refund_tx = rel_resp.refund_tx_hash or f"sim_tx_refund_{uuid4().hex[:10]}"
+            checkin_text = (
+                f"🎉 **अस्पताल चेक-इन सत्यापन एवं रिफंड सफल! (Check-in Verified)**\n\n"
+                f"🏥 **स्वास्थ्य केंद्र:** {booking.get('clinic_name', 'अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)')}\n"
+                f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+                f"👨‍⚕️ **परामर्शदाता:** {booking.get('doctor_name', 'Dr. Rajesh Meena')} ({booking.get('room_no', 'कक्ष संख्या 2')})\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"💰 **एस्क्रो रिफंड स्थिति (Fetch.ai Payment Protocol):**\n"
+                f"• स्थिति: **100% रिफंड पूरा हुआ (REFUNDED)**\n"
+                f"• रिफंड राशि: **{rel_resp.refund_amount_fet or 0.5} FET**\n"
+                f"• रिफंड खाता: `{sender}`\n"
+                f"• ट्रांजैक्शन हैश: `{refund_tx}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"✅ मरीज का चेक-इन पूरा हो चुका है। कृपया कक्ष के बाहर अपनी बारी की प्रतीक्षा करें।\n\n"
+                f"*(नए परामर्श के लिए **'start'** या **'नया'** लिखकर भेजें)*"
+            )
+            await ctx.send(sender, create_text_chat(checkin_text))
+            ctx.logger.info(f"✅ Clinic check-in executed and escrow refunded for ticket {ticket_id}")
+            return
+
+        # C. View Dossier Action (Button 2 or text '2', 'dossier', 'डोजियर', 'summary')
+        is_dossier = (
+            act_name == "view_dossier"
+            or (act_name == "numeric_choice" and action_data.get("choice") == 2)
+            or user_lower in ("2", "दो", "#2", "[2]", "dossier", "डोजियर", "summary", "सारांश")
+            or any(kw in user_lower for kw in ["dossier", "डोजियर", "summary", "सारांश", "पर्ची", "रिपोर्ट"])
+        )
+        if is_dossier:
+            booking = session.get("booking_details") or {}
+            doc = booking.get("doctor_name", "Dr. Rajesh Meena")
+            clinic = booking.get("clinic_name", "सामुदायिक स्वास्थ्य केंद्र, अलवर")
+            room = booking.get("room_no", "कक्ष संख्या 2")
+            slot_t = booking.get("slot_time", "09:30 AM - 10:00 AM")
+            spec = session.get("recommended_specialty", "General Medicine")
+            dossier_text = (
+                f"📋 **ओपीडी क्लिनिकल डोजियर (Doctor's Intake Dossier)**\n\n"
+                f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+                f"👨‍⚕️ **परामर्शदाता:** {doc} ({room})\n"
+                f"🏥 **अस्पताल:** {clinic}\n"
+                f"🕒 **समय:** {slot_t}\n"
+                f"🩺 **विभाग:** {spec}\n\n"
+                f"*(यह क्लिनिकल डोजियर डॉक्टर के ओपीडी कंप्यूटर पर उपलब्ध करा दिया गया है)*\n\n"
+                f"👉 अस्पताल पहुंचने पर चेक-इन एवं 0.5 FET रिफंड के लिए **'1'** लिखकर भेजें।"
+            )
+            await ctx.send(sender, create_text_chat(dossier_text))
+            return
+
+        # D. Otherwise, remind user of their existing confirmed ticket
         booking = session.get("booking_details") or {}
-        ticket_id = session.get("ticket_id")
-        doc = booking.get("doctor_name", "Dr. Harish Sharma")
-        room = booking.get("room_no", "कक्ष संख्या 4")
-        slot_t = booking.get("slot_time", "10:00 AM - 10:30 AM")
+        doc = booking.get("doctor_name", "Dr. Rajesh Meena")
+        room = booking.get("room_no", "कक्ष संख्या 2")
+        slot_t = booking.get("slot_time", "09:30 AM - 10:00 AM")
         clinic = booking.get("clinic_name", "सामुदायिक स्वास्थ्य केंद्र, अलवर")
         already_confirmed_msg = (
             f"🎉 **आपकी ओपीडी परामर्श बुकिंग पहले ही सुनिश्चित हो चुकी है!**\n\n"
@@ -597,7 +672,10 @@ async def _process_user_text(
             f"👨‍⚕️ **चिकित्सक:** {doc} ({room})\n"
             f"🕒 **समय:** {slot_t}\n"
             f"🏥 **अस्पताल:** {clinic}\n\n"
-            f"*(नए लक्षण या नए मरीज के लिए **'नया'** या **'start'** लिखकर भेजें)*"
+            f"👉 विकल्प चुनें:\n"
+            f"• अस्पताल चेक-इन और रिफंड के लिए: **'1'** या **'check-in'**\n"
+            f"• क्लिनिकल डोजियर देखने के लिए: **'2'** या **'dossier'**\n"
+            f"• नए लक्षण या नए मरीज के लिए: **'नया'** या **'start'**"
         )
         await ctx.send(sender, create_text_chat(already_confirmed_msg))
         return

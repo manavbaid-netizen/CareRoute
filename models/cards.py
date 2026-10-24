@@ -115,7 +115,12 @@ def card_to_markdown(card: dict[str, Any]) -> str:
             for fact in sec["facts"]:
                 lines.append(f"• **{fact['label']}:** {fact['value']}")
         if sec.get("qr_payload"):
-            lines.append(f"\n🔐 **चेक-इन टोकन (Check-in Token):** `{sec['qr_payload']}`")
+            import urllib.parse
+
+            qr_encoded = urllib.parse.quote(sec["qr_payload"])
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={qr_encoded}"
+            lines.append(f"\n📱 **डिजिटल ओपीडी क्यूआर कोड (Show to Clinic Scanner):**\n\n![OPD QR Code]({qr_url})\n")
+            lines.append(f"🔐 **चेक-इन टोकन (Check-in Token):** `{sec['qr_payload']}`")
         lines.append("")
 
     if actions:
@@ -267,8 +272,20 @@ def create_card_chat(
 
     if use_interactive:
         # Wrap card in MetadataContent for ASI:One native renderer
+        type_to_kind = {
+            "triage_detail": "detail",
+            "slot_picker": "carousel",
+            "booking_receipt": "review",
+            "emergency_sos": "detail",
+        }
+        card_type = card.get("card_type", "custom")
+        asi_kind = type_to_kind.get(card_type, "custom")
+
         card_metadata = {
+            "card_protocol_version": "1",
+            "requires_card_interaction": "true" if card.get("actions") else "false",
             "card_kind": card.get("card_type", "card"),
+            "ui_kind": asi_kind,
             "card_payload": json.dumps(card, ensure_ascii=False),
             "card_version": str(card.get("version", "1.0")),
             "title": card.get("header", {}).get("title", ""),

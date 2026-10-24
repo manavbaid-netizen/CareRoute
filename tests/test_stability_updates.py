@@ -350,8 +350,94 @@ async def test_maybe_2_slot_selection_flow():
 
     await _process_user_text(mock_ctx, user, session, "maybe 2")
 
-    # Should book slot 2 ("ALW_GEN_1000") and transition to STATE_CONFIRMED
+    # Should book slot 2 ("ALW_GEN_1100") and transition to STATE_CONFIRMED
     assert session["state"] == "STATE_CONFIRMED"
     assert session.get("ticket_id") is not None
     assert mock_ctx.send.call_count >= 1
+
+
+@pytest.mark.anyio
+async def test_confirmed_booking_checkin_flow():
+    """Verify in STATE_CONFIRMED, choosing '1' or 'check-in' triggers hospital check-in & escrow refund."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from agents.dispatcher import _process_user_text, roster_service
+
+    ticket = "CR-ALW-TESTCHK01"
+    patient = "agent1q_test_patient_chk"
+    roster_service.create_escrow_deposit(
+        ticket_id=ticket,
+        patient_address=patient,
+        amount_fet=0.5,
+        status="LOCKED",
+    )
+
+    session = {
+        "user_address": patient,
+        "state": "STATE_CONFIRMED",
+        "ticket_id": ticket,
+        "patient_id": "P-303",
+        "patient_name": "सीता देवी",
+        "booking_details": {
+            "ticket_id": ticket,
+            "doctor_name": "Dr. Rajesh Meena",
+            "clinic_name": "अलवर CHC",
+            "room_no": "कक्ष 2",
+            "slot_time": "09:30 AM",
+            "qr_payload": f"CAREROUTE:{ticket}",
+        },
+    }
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    await _process_user_text(mock_ctx, patient, session, "1")
+
+    assert mock_ctx.send.call_count == 1
+    sent_text = mock_ctx.send.call_args[0][1].content[0].text
+    assert "चेक-इन सत्यापन एवं रिफंड सफल" in sent_text
+    assert "0.5 FET" in sent_text
+
+    # Verify SQLite escrow status changed to REFUNDED
+    rec = roster_service.get_escrow(ticket)
+    assert rec["status"] == "REFUNDED"
+
+
+@pytest.mark.anyio
+async def test_confirmed_booking_view_dossier_flow():
+    """Verify in STATE_CONFIRMED, choosing '2' or 'dossier' displays doctor's clinical intake dossier."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from agents.dispatcher import _process_user_text
+
+    ticket = "CR-ALW-TESTDOS02"
+    patient = "agent1q_test_patient_dos"
+
+    session = {
+        "user_address": patient,
+        "state": "STATE_CONFIRMED",
+        "ticket_id": ticket,
+        "patient_id": "P-303",
+        "patient_name": "सीता देवी",
+        "recommended_specialty": "General Medicine",
+        "booking_details": {
+            "ticket_id": ticket,
+            "doctor_name": "Dr. Rajesh Meena",
+            "clinic_name": "अलवर CHC",
+            "room_no": "कक्ष 2",
+            "slot_time": "09:30 AM",
+        },
+    }
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    await _process_user_text(mock_ctx, patient, session, "2")
+
+    assert mock_ctx.send.call_count == 1
+    sent_text = mock_ctx.send.call_args[0][1].content[0].text
+    assert "क्लिनिकल डोजियर" in sent_text
+    assert ticket in sent_text
 
