@@ -104,8 +104,9 @@ _SENDER_MESSAGE_TIMESTAMPS: dict[str, list[float]] = {}
 def _get_dispatcher_mailbox() -> bool | str:
     if not Config.USE_AGENTVERSE:
         return False
-    if Config.AGENT_MAILBOX_KEY:
-        return f"{Config.AGENT_MAILBOX_KEY}@https://agentverse.ai"
+    mailbox_key = Config.AGENT_MAILBOX_KEY or Config.AGENTVERSE_API_KEY
+    if mailbox_key:
+        return f"{mailbox_key}@https://agentverse.ai"
     return True
 
 
