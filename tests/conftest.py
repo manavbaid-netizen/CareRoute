@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
-import uagents.network
+
 import uagents.agent
+import uagents.network
 
 # Mock ledger and almanac contract during tests to prevent TCP timeout when offline
 mock_ledger = MagicMock()
