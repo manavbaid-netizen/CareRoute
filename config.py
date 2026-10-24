@@ -1,9 +1,22 @@
 from __future__ import annotations
 
+import builtins
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Ensure default UTF-8 text encoding on Windows (prevents cp1252 decode errors on Devanagari text)
+_orig_open = builtins.open
+
+
+def _safe_open(file, mode="r", *args, **kwargs):
+    if "b" not in mode and "encoding" not in kwargs:
+        kwargs["encoding"] = "utf-8"
+    return _orig_open(file, mode, *args, **kwargs)
+
+
+builtins.open = _safe_open
 
 BASE_DIR = Path(__file__).resolve().parent
 # Load .env file if present
@@ -73,6 +86,7 @@ class Config(metaclass=ConfigMeta):
 
     # Agentverse / ASI:One Gateway Configuration
     AGENTVERSE_API_KEY: str = os.getenv("AGENTVERSE_API_KEY", "")
+    AGENT_MAILBOX_KEY: str = os.getenv("AGENT_MAILBOX_KEY", "")
     USE_AGENTVERSE: bool = os.getenv("USE_AGENTVERSE", "false").lower() in ("true", "1", "yes")
     AGENTVERSE_URL: str = os.getenv("AGENTVERSE_URL", "https://agentverse.ai")
 

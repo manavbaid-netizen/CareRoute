@@ -59,9 +59,10 @@ dispatcher = Agent(
     name="dispatcher",
     seed=Config.DISPATCHER_SEED,
     port=Config.DISPATCHER_PORT,
-    endpoint=Config.get_agent_endpoint(Config.DISPATCHER_PORT) if not Config.USE_AGENTVERSE else None,
+    endpoint=None if Config.USE_AGENTVERSE else Config.get_agent_endpoint(Config.DISPATCHER_PORT),
     mailbox=Config.USE_AGENTVERSE,
-    agentverse=f"{Config.AGENTVERSE_API_KEY}@{Config.AGENTVERSE_URL.replace('https://', '')}" if Config.USE_AGENTVERSE and Config.AGENTVERSE_API_KEY else None,
+    publish_agent_details=Config.USE_AGENTVERSE,
+    readme_path="agentverse_readme.md",
 )
 
 
