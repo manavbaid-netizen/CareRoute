@@ -176,3 +176,13 @@
   - `tests/test_stability_updates.py`: 10 targeted tests verifying robust JSON parsing with fences/preambles, sub-second timeout fallback, acute respiratory risk escalation, and negation guardrails.
 - **Tests Passing**: 84/84 tests passing across the entire test suite (`pytest -v`).
 - **Demo Verification**: `python main.py --demo` verified running cleanly end-to-end.
+
+## Agentverse Mailbox & Local Inspector Integration Update
+- **Issue Diagnosed**: Agentverse returns `401: {"detail": "Could not validate credentials"}` when an agent polls its mailbox before Step 2 activation in Agentverse. Furthermore, modern Chromium browsers (Chrome, Edge, Brave) enforce Private Network Access and CORS preflight checks that blocked the Agentverse web UI from contacting `http://127.0.0.1:8000`.
+- **Patches Applied**:
+  - `agents/dispatcher.py`:
+    - Injected CORS (`access-control-allow-origin: *`) and Private Network Access (`access-control-allow-private-network: true`) headers on `ASGIServer._asgi_send`.
+    - Added `Mailbox401Filter` to suppress repetitive 401 polling logs and output a clean user guidance notice until activation completes.
+  - `config.py`:
+    - Dynamic `USE_AGENTVERSE` override for test runners to maintain clean offline unit test execution.
+
