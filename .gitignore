@@ -31,3 +31,4 @@ data/bookings/
 __MACOSX/
 Thumbs.db
 desktop.ini
+private_keys.json
