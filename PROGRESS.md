@@ -189,5 +189,9 @@
     - Added `_get_dispatcher_mailbox()` to support direct `AGENT_MAILBOX_KEY` injection (`mailbox=f"{Config.AGENT_MAILBOX_KEY}@https://agentverse.ai"`), bypassing local browser network restrictions completely.
   - `scripts/check_registration.py`:
     - Added display of `AGENT_MAILBOX_KEY` configuration status.
+- **Linter & Code Quality**:
+  - `ruff check .`: 0 errors (all checks passed).
+  - `ruff format --check .`: 100% formatted across all 42 files.
+
 
 
