@@ -42,6 +42,7 @@ from models.chat_models import (
 )
 from services.geo_service import GeoService
 from services.session_store import SessionStore
+from services.swarm_resolver import make_swarm_resolver
 
 # CORS & Chromium Private Network Access handler for Agentverse Local Inspector
 _orig_asgi_send = ASGIServer._asgi_send
@@ -125,6 +126,7 @@ dispatcher = Agent(
     port=Config.DISPATCHER_PORT,
     endpoint=_get_dispatcher_endpoint(),
     mailbox=_get_dispatcher_mailbox(),
+    resolve=make_swarm_resolver(),
     publish_agent_details=Config.USE_AGENTVERSE or bool(Config.AGENT_ENDPOINT),
     readme_path="agentverse_readme.md",
 )
@@ -254,6 +256,12 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
             await _process_user_text(ctx, sender, session, user_text)
             return
 
+        # (E) Stream control markers from ASI:One (silently handled)
+        elif getattr(item, "type", None) in ("end-stream", "end_stream") or "EndStream" in str(
+            type(item)
+        ):
+            continue
+
         else:
             ctx.logger.warning(f"Ignoring unrecognized ACP content item: {type(item)}")
 
@@ -301,11 +309,51 @@ async def _process_user_text(
         f"💬 [CID: {correlation_id}] User text from {sender}: '{user_text[:60]}...' [State: {session['state']}]"
     )
 
-    # 3. Check for nearby CHC / Hospital inquiry
-    if any(
-        kw in user_text.lower()
-        for kw in ["अस्पताल", "नजदीकी अस्पताल", "chc", "hospital", "निकटतम", "nearest chc"]
-    ):
+    # 3. Check for greeting (e.g. "hi", "hello", "नमस्ते", "hey", "start")
+    greetings = {
+        "hi",
+        "hello",
+        "hey",
+        "नमस्ते",
+        "नमस्कार",
+        "pranam",
+        "प्रणाम",
+        "start",
+        "shuru",
+        "शुरू",
+        "हाय",
+        "हेलो",
+    }
+    cleaned_input = re.sub(r"[^\w\s]", "", user_text.lower()).strip()
+    if cleaned_input in greetings or any(user_text.lower().strip() == g for g in greetings):
+        welcome_text = (
+            "नमस्ते! मैं **केयररूट (CareRoute)** - आपका डिजिटल स्वास्थ्य सहायक हूँ। 🙏\n\n"
+            "कृपया अपनी समस्या या लक्षण बताएं। आप बोलकर या लिखकर (हिंदी / English) बता सकते हैं, "
+            "या पुरानी पर्ची की फोटो भेज सकते हैं।\n\n"
+            "*(उदाहरण: 'मुझे 3 दिन से तेज़ बुखार और खांसी आ रही है')*"
+        )
+        await ctx.send(sender, create_text_chat(welcome_text))
+        ctx.logger.info(f"👋 [CID: {correlation_id}] Dispatched welcome greeting to {sender}")
+        return
+
+    # 4. Check for explicit nearby CHC / Hospital location inquiry
+    hospital_inquiry_phrases = [
+        "नजदीकी अस्पताल",
+        "निकटतम अस्पताल",
+        "nearest chc",
+        "nearest hospital",
+        "अस्पताल कहाँ है",
+        "अस्पताल की सूची",
+        "chc कहाँ है",
+        "hospital list",
+        "पास का अस्पताल",
+        "आसपास का अस्पताल",
+        "हॉस्पिटल कहाँ है",
+    ]
+    is_hospital_inquiry = any(p in user_text.lower() for p in hospital_inquiry_phrases) or (
+        user_text.lower().strip() in ("अस्पताल", "hospital", "chc", "निकटतम chc", "हॉस्पिटल")
+    )
+    if is_hospital_inquiry:
         facilities = geo_service.find_nearest_chc(max_results=3)
         chc_header = "🏥 **अलवर जिले के निकटतम सामुदायिक स्वास्थ्य केंद्र (Nearby CHCs):**\n\n"
         chc_body = "\n\n─────────────────\n\n".join(

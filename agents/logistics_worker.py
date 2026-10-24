@@ -13,6 +13,7 @@ from models.chat_models import (
 )
 from services.clinic_roster import ClinicRosterService
 from services.dossier_generator import DossierGeneratorService
+from services.swarm_resolver import make_swarm_resolver
 
 logger = logging.getLogger("CareRoute.LogisticsWorker")
 
@@ -22,6 +23,7 @@ logistics_worker = Agent(
     seed=Config.LOGISTICS_SEED,
     port=Config.LOGISTICS_PORT,
     endpoint=Config.get_agent_endpoint(Config.LOGISTICS_PORT),
+    resolve=make_swarm_resolver(),
 )
 
 roster_service = ClinicRosterService()

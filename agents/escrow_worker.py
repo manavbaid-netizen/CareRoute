@@ -23,6 +23,7 @@ from models.chat_models import (
     EscrowReleaseResponse,
 )
 from services.clinic_roster import ClinicRosterService
+from services.swarm_resolver import make_swarm_resolver
 
 logger = logging.getLogger("CareRoute.EscrowWorker")
 
@@ -32,6 +33,7 @@ escrow_worker = Agent(
     seed=Config.ESCROW_SEED,
     port=Config.ESCROW_PORT,
     endpoint=Config.get_agent_endpoint(Config.ESCROW_PORT),
+    resolve=make_swarm_resolver(),
 )
 
 roster_service = ClinicRosterService()

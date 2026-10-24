@@ -53,9 +53,7 @@ async def main() -> None:
     console.print(f"• [bold]Agent Name:[/bold] {dispatcher.name}")
     console.print(f"• [bold]Agent Address:[/bold] {dispatcher.address}")
     console.print(f"• [bold]Agentverse URL:[/bold] {dispatcher.agentverse.url}")
-    console.print(
-        f"• [bold]Mailbox Endpoint:[/bold] {dispatcher.agentverse.mailbox_endpoint}"
-    )
+    console.print(f"• [bold]Mailbox Endpoint:[/bold] {dispatcher.agentverse.mailbox_endpoint}")
 
     request = AgentverseConnectRequest(
         user_token=Config.AGENTVERSE_API_KEY,
@@ -75,9 +73,7 @@ async def main() -> None:
         metadata=dispatcher.metadata,
     )
 
-    console.print(
-        "\n[bold yellow]Submitting cryptographic proof to Agentverse...[/bold yellow]"
-    )
+    console.print("\n[bold yellow]Submitting cryptographic proof to Agentverse...[/bold yellow]")
     try:
         response = await register_in_agentverse(
             request=request,
@@ -103,13 +99,9 @@ async def main() -> None:
             console.print("\nYou can now start the 4-agent swarm:")
             console.print("[bold green]python run_all.py[/bold green]")
         else:
-            console.print(
-                f"\n[bold red]❌ Registration failed:[/bold red] {response.detail}"
-            )
+            console.print(f"\n[bold red]❌ Registration failed:[/bold red] {response.detail}")
     except Exception as exc:
-        console.print(
-            f"\n[bold red]❌ Unexpected error during registration:[/bold red] {exc}"
-        )
+        console.print(f"\n[bold red]❌ Unexpected error during registration:[/bold red] {exc}")
 
 
 if __name__ == "__main__":

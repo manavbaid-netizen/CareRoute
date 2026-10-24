@@ -7,6 +7,7 @@ from uagents import Agent, Context
 from config import Config
 from models.chat_models import TriageAnalysisRequest, TriageAnalysisResponse
 from services.dossier_generator import DossierGeneratorService
+from services.swarm_resolver import make_swarm_resolver
 from services.vlm_service import VLMService
 
 logger = logging.getLogger("CareRoute.DiagnosticWorker")
@@ -17,6 +18,7 @@ diagnostic_worker = Agent(
     seed=Config.DIAGNOSTIC_SEED,
     port=Config.DIAGNOSTIC_PORT,
     endpoint=Config.get_agent_endpoint(Config.DIAGNOSTIC_PORT),
+    resolve=make_swarm_resolver(),
 )
 
 vlm_service = VLMService()
