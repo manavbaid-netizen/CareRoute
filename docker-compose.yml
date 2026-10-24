@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  careroute:
+    build: .
+    container_name: careroute-swarm
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+      - "8003:8003"
+    volumes:
+      - ./data:/app/data
