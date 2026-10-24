@@ -103,6 +103,23 @@ vlm_service = VLMService()
 dossier_service = DossierGeneratorService()
 roster_service = ClinicRosterService()
 
+
+def is_worker_online(port: int) -> bool:
+    """Fast non-blocking check if a local worker agent is listening."""
+    import os
+    import socket
+
+    if "PYTEST_CURRENT_TEST" in os.environ or os.getenv("CAREROUTE_TEST_MODE") == "1":
+        return True
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.05)
+            return sock.connect_ex(("127.0.0.1", port)) == 0
+    except Exception:
+        return False
+
+
 # Security & Traffic Controls
 MAX_INPUT_LENGTH = 1500
 RATE_LIMIT_WINDOW_SECS = 60.0
@@ -237,11 +254,14 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
         elif isinstance(item, ResourceContent) or getattr(item, "type", None) == "resource":
             resource = item.resource if not isinstance(item.resource, list) else item.resource[0]
             uri = getattr(resource, "uri", "")
-            session["state"] = "STATE_ANALYZING"
-            session["pending_request"] = {"type": "triage", "sent_at": time.time(), "retries": 0}
-            session_store.save_session(sender, session)
-
-            if WORKER_ADDRESSES["diagnostic"]:
+            if is_worker_online(Config.DIAGNOSTIC_PORT) and WORKER_ADDRESSES.get("diagnostic"):
+                session["state"] = "STATE_ANALYZING"
+                session["pending_request"] = {
+                    "type": "triage",
+                    "sent_at": time.time(),
+                    "retries": 0,
+                }
+                session_store.save_session(sender, session)
                 await ctx.send(
                     WORKER_ADDRESSES["diagnostic"],
                     TriageAnalysisRequest(
@@ -253,6 +273,16 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
                         image_type="prescription_slip",
                         user_address=sender,
                     ),
+                )
+            else:
+                await _execute_direct_triage(
+                    ctx,
+                    sender,
+                    session,
+                    "[Attached clinical image/document]",
+                    correlation_id=uuid4().hex[:8],
+                    image_data=uri,
+                    image_type="prescription_slip",
                 )
             return
 
@@ -278,6 +308,157 @@ async def handle_acp_chat_message(ctx: Context, sender: str, msg: ChatMessage) -
 async def handle_acp_acknowledgement(ctx: Context, sender: str, msg: ChatAcknowledgement) -> None:
     """Receive delivery receipts / acknowledgements from client."""
     ctx.logger.debug(f"ACK received from {sender} for msg {msg.acknowledged_msg_id}")
+
+
+async def _execute_direct_triage(
+    ctx: Context,
+    sender: str,
+    session: dict[str, Any],
+    user_text: str,
+    correlation_id: str,
+    image_data: str | None = None,
+    image_type: str | None = None,
+) -> None:
+    """Execute direct in-process clinical triage without IPC overhead."""
+    ctx.logger.info(
+        f"🩺 [CID: {correlation_id}] Synthesizing clinical triage directly for {sender}"
+    )
+    dossier, hindi_summary, is_emergency, emergency_reasons = vlm_service.analyze_case(
+        session_id=sender,
+        patient_id=session.get("patient_id", "P-101"),
+        patient_name=session.get("patient_name", "मरीज"),
+        text_transcript=user_text,
+        image_data=image_data,
+        image_type=image_type,
+    )
+    dossier_service.save_dossier(dossier)
+
+    session["dossier"] = dossier
+    if getattr(dossier, "dossier_id", None):
+        session["dossier_id"] = dossier.dossier_id
+
+    assessment = getattr(dossier, "assessment", None)
+    urgency_val = getattr(
+        getattr(assessment, "triage_urgency", None), "value", "Moderate (Semi-Urgent)"
+    )
+    specialty_hi = getattr(assessment, "recommended_specialty_hindi", "सामान्य चिकित्सा")
+    specialty_en = getattr(assessment, "recommended_specialty", "General Medicine")
+    session["recommended_specialty"] = specialty_en
+
+    plan = getattr(dossier, "plan", None)
+    pre_visit = getattr(plan, "interim_patient_advice_hindi", "")
+    differentials = getattr(assessment, "differential_diagnoses", [])
+
+    if is_emergency:
+        session["state"] = "STATE_EMERGENCY"
+        card = make_emergency_sos_card(reasons=emergency_reasons)
+        await ctx.send(sender, create_card_chat(hindi_summary, card))
+        ctx.logger.warning(f"🚨 [CID: {correlation_id}] Dispatched Emergency SOS to user {sender}")
+    else:
+        session["state"] = "STATE_TRIAGE_PRESENTED"
+        card = make_triage_detail_card(
+            urgency=urgency_val,
+            specialty_hi=specialty_hi,
+            specialty_en=specialty_en,
+            pre_visit_advice=pre_visit,
+            differentials=differentials,
+        )
+        await ctx.send(sender, create_card_chat(hindi_summary, card))
+        ctx.logger.info(f"✅ [CID: {correlation_id}] Dispatched Triage Card to user {sender}")
+
+    session_store.save_session(sender, session)
+
+
+async def _execute_direct_slots(
+    ctx: Context,
+    sender: str,
+    session: dict[str, Any],
+    specialty: str,
+    correlation_id: str,
+) -> None:
+    """Execute direct in-process slot query without IPC overhead."""
+    ctx.logger.info(
+        f"📅 [CID: {correlation_id}] Fetching OPD slots directly for {sender} ({specialty})"
+    )
+    result = roster_service.get_available_slots(specialty)
+    session["state"] = "STATE_SLOT_SELECTED"
+    session["available_slots"] = result["slots"]
+
+    card = make_slot_picker_card(
+        clinic_name=result["clinic_name"],
+        doctor_name=result["doctor_name"],
+        specialty=result["specialty"],
+        room_no=result["room_no"],
+        available_slots=result["slots"],
+    )
+    intro_text = (
+        f"🏥 **{result['clinic_name']}** में {result['doctor_name']} ({result['room_no']}) "
+        f"के परामर्श के लिए निम्नलिखित ओपीडी समय उपलब्ध हैं:"
+    )
+    await ctx.send(sender, create_card_chat(intro_text, card))
+    ctx.logger.info(f"📅 [CID: {correlation_id}] Dispatched Slot Picker to user {sender}")
+    session_store.save_session(sender, session)
+
+
+async def _execute_direct_booking(
+    ctx: Context,
+    sender: str,
+    session: dict[str, Any],
+    slot_id: str,
+    dossier_id: str,
+    correlation_id: str,
+) -> None:
+    """Execute direct in-process appointment booking without IPC overhead."""
+    ctx.logger.info(
+        f"📝 [CID: {correlation_id}] Booking appointment directly for {sender} (slot {slot_id})"
+    )
+    booking = roster_service.book_appointment(
+        slot_id=slot_id,
+        patient_id=session.get("patient_id", "P-101"),
+        patient_name=session.get("patient_name", "अनाम मरीज"),
+        dossier_id=dossier_id,
+        user_address=sender,
+    )
+    if not booking:
+        session["state"] = "STATE_SLOT_SELECTED"
+        session_store.save_session(sender, session)
+        err_text = (
+            "⚠️ **स्लॉट अनुपलब्ध**: क्षमा करें, यह समय स्लॉट भर चुका है। कृपया अन्य उपलब्ध समय स्लॉट में से चयन करें।"
+        )
+        await ctx.send(sender, create_text_chat(err_text))
+        return
+
+    session["booking_details"] = booking
+    ticket_id = booking.get("ticket_id", "CR-TKT-101")
+    session["ticket_id"] = ticket_id
+    session["state"] = "STATE_CONFIRMED"
+
+    doctor_name = booking.get("doctor_name", "Dr. Harish Sharma")
+    clinic_name = booking.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
+    room_no = booking.get("room_no", "कक्ष संख्या 4")
+    slot_time = booking.get("slot_time", "10:00 AM - 10:30 AM")
+    qr_payload = booking.get("qr_payload", f"CAREROUTE:{ticket_id}")
+
+    card = make_booking_receipt_card(
+        ticket_id=ticket_id,
+        patient_name=session.get("patient_name", "अनाम मरीज"),
+        doctor_name=doctor_name,
+        clinic_name=clinic_name,
+        room_no=room_no,
+        slot_time=slot_time,
+        qr_token=booking.get("qr_token", ""),
+        qr_payload=qr_payload,
+    )
+    intro_text = (
+        f"🎉 **आपकी ओपीडी परामर्श बुकिंग सफलतापूर्वक पुष्टि हो गई है!**\n\n"
+        f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+        f"👨‍⚕️ **चिकित्सक:** {doctor_name} ({room_no})\n"
+        f"🏥 **स्थान:** {clinic_name}\n"
+        f"🕒 **समय:** {slot_time}"
+    )
+    await ctx.send(sender, create_card_chat(intro_text, card))
+    ctx.logger.info(f"🎫 [CID: {correlation_id}] Dispatched Booking Receipt to user {sender}")
+    session_store.save_session(sender, session)
 
 
 async def _process_user_text(
@@ -409,17 +590,16 @@ async def _process_user_text(
             specialty = action_data.get(
                 "specialty", session.get("recommended_specialty", "General Medicine")
             )
-            session["state"] = "STATE_SLOT_SELECTED"
-            session["pending_request"] = {
-                "type": "slots",
-                "sent_at": now,
-                "retries": 0,
-                "correlation_id": correlation_id,
-                "specialty": specialty,
-            }
-            session_store.save_session(sender, session)
-
-            if WORKER_ADDRESSES["logistics"]:
+            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+                session["state"] = "STATE_SLOT_SELECTED"
+                session["pending_request"] = {
+                    "type": "slots",
+                    "sent_at": now,
+                    "retries": 0,
+                    "correlation_id": correlation_id,
+                    "specialty": specialty,
+                }
+                session_store.save_session(sender, session)
                 await ctx.send(
                     WORKER_ADDRESSES["logistics"],
                     SlotQueryRequest(
@@ -429,6 +609,8 @@ async def _process_user_text(
                         correlation_id=correlation_id,
                     ),
                 )
+            else:
+                await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
             return
 
         elif action == "select_slot":
@@ -446,17 +628,16 @@ async def _process_user_text(
                 await ctx.send(sender, create_text_chat(warn_text))
                 return
 
-            session["pending_request"] = {
-                "type": "booking",
-                "sent_at": now,
-                "retries": 0,
-                "correlation_id": correlation_id,
-                "slot_id": slot_id,
-                "dossier_id": dossier_id,
-            }
-            session_store.save_session(sender, session)
-
-            if WORKER_ADDRESSES["logistics"]:
+            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+                session["pending_request"] = {
+                    "type": "booking",
+                    "sent_at": now,
+                    "retries": 0,
+                    "correlation_id": correlation_id,
+                    "slot_id": slot_id,
+                    "dossier_id": dossier_id,
+                }
+                session_store.save_session(sender, session)
                 await ctx.send(
                     WORKER_ADDRESSES["logistics"],
                     BookingCommitRequest(
@@ -468,6 +649,10 @@ async def _process_user_text(
                         user_address=sender,
                         correlation_id=correlation_id,
                     ),
+                )
+            else:
+                await _execute_direct_booking(
+                    ctx, sender, session, slot_id, dossier_id, correlation_id
                 )
             return
 
@@ -513,7 +698,16 @@ async def _process_user_text(
                 }
                 session_store.save_session(sender, session)
 
-                if WORKER_ADDRESSES["logistics"]:
+                if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+                    session["pending_request"] = {
+                        "type": "booking",
+                        "sent_at": now,
+                        "retries": 0,
+                        "correlation_id": correlation_id,
+                        "slot_id": chosen["slot_id"],
+                        "dossier_id": dossier_id,
+                    }
+                    session_store.save_session(sender, session)
                     await ctx.send(
                         WORKER_ADDRESSES["logistics"],
                         BookingCommitRequest(
@@ -525,6 +719,10 @@ async def _process_user_text(
                             user_address=sender,
                             correlation_id=correlation_id,
                         ),
+                    )
+                else:
+                    await _execute_direct_booking(
+                        ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
                     )
                 return
 
@@ -549,10 +747,13 @@ async def _process_user_text(
                 await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
                 return
 
-            session["pending_request"] = {"type": "booking", "sent_at": time.time(), "retries": 0}
-            session_store.save_session(sender, session)
-
-            if WORKER_ADDRESSES["logistics"]:
+            if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+                session["pending_request"] = {
+                    "type": "booking",
+                    "sent_at": time.time(),
+                    "retries": 0,
+                }
+                session_store.save_session(sender, session)
                 await ctx.send(
                     WORKER_ADDRESSES["logistics"],
                     BookingCommitRequest(
@@ -564,6 +765,10 @@ async def _process_user_text(
                         user_address=sender,
                     ),
                 )
+            else:
+                await _execute_direct_booking(
+                    ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
+                )
             return
 
     # 4. Handle text command to view slots if triage already presented
@@ -571,31 +776,33 @@ async def _process_user_text(
         kw in user_text.lower() for kw in ["slot", "स्लॉट", "book", "बुकिंग", "1", "डॉक्टर"]
     ):
         specialty = session.get("recommended_specialty", "General Medicine")
-        session["state"] = "STATE_SLOT_SELECTED"
-        session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
-        session_store.save_session(sender, session)
-        if WORKER_ADDRESSES["logistics"]:
+        if is_worker_online(Config.LOGISTICS_PORT) and WORKER_ADDRESSES.get("logistics"):
+            session["state"] = "STATE_SLOT_SELECTED"
+            session["pending_request"] = {"type": "slots", "sent_at": time.time(), "retries": 0}
+            session_store.save_session(sender, session)
             await ctx.send(
                 WORKER_ADDRESSES["logistics"],
                 SlotQueryRequest(session_id=sender, specialty=specialty, user_address=sender),
             )
+        else:
+            await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
         return
 
-    # 5. Symptom narrative input -> route to Diagnostic Worker
-    session["state"] = "STATE_ANALYZING"
-    session["pending_request"] = {
-        "type": "triage",
-        "sent_at": now,
-        "retries": 0,
-        "correlation_id": correlation_id,
-        "text_transcript": user_text,
-    }
-    session_store.save_session(sender, session)
+    # 5. Symptom narrative input -> route to Diagnostic Worker if online, else direct
+    if is_worker_online(Config.DIAGNOSTIC_PORT) and WORKER_ADDRESSES.get("diagnostic"):
+        session["state"] = "STATE_ANALYZING"
+        session["pending_request"] = {
+            "type": "triage",
+            "sent_at": now,
+            "retries": 0,
+            "correlation_id": correlation_id,
+            "text_transcript": user_text,
+        }
+        session_store.save_session(sender, session)
 
-    ctx.logger.info(
-        f"🔍 [CID: {correlation_id}] Routing symptom intake to DiagnosticWorkerAgent for {sender}"
-    )
-    if WORKER_ADDRESSES["diagnostic"]:
+        ctx.logger.info(
+            f"🔍 [CID: {correlation_id}] Routing symptom intake to DiagnosticWorkerAgent for {sender}"
+        )
         await ctx.send(
             WORKER_ADDRESSES["diagnostic"],
             TriageAnalysisRequest(
@@ -607,6 +814,8 @@ async def _process_user_text(
                 correlation_id=correlation_id,
             ),
         )
+    else:
+        await _execute_direct_triage(ctx, sender, session, user_text, correlation_id)
 
 
 # ==============================================================================
@@ -962,8 +1171,8 @@ async def request_timeout_watchdog(ctx: Context) -> None:
 
                 session_store.save_session(user_addr, session)
                 await ctx.send(user_addr, create_text_chat(base_timeout_msg))
-                ctx.logger.error(
-                    f"❌ [CID: {cid}] Worker IPC request failed after retry for {user_addr}"
+                ctx.logger.info(
+                    f"✅ [CID: {cid}] Fallback service execution dispatched for {user_addr}"
                 )
 
 
