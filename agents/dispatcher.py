@@ -543,6 +543,38 @@ async def _process_user_text(
         ctx.logger.info(f"👋 [CID: {correlation_id}] Dispatched welcome greeting to {sender}")
         return
 
+    # Check if user already has a confirmed booking in this session
+    if session.get("state") == "STATE_CONFIRMED" and session.get("ticket_id"):
+        if any(kw in user_text.lower() for kw in ["new", "restart", "start", "नया", "शुरू", "begin"]):
+            session["state"] = "STATE_IDLE"
+            session["dossier"] = None
+            session["dossier_id"] = None
+            session["ticket_id"] = None
+            session["available_slots"] = None
+            session["selected_slot"] = None
+            session["pending_request"] = None
+            session_store.save_session(sender, session)
+            reset_msg = "🔄 नया सत्र प्रारंभ हो गया है। कृपया अपने नए लक्षण या स्वास्थ्य समस्या बताएं।"
+            await ctx.send(sender, create_text_chat(reset_msg))
+            return
+
+        booking = session.get("booking_details") or {}
+        ticket_id = session.get("ticket_id")
+        doc = booking.get("doctor_name", "Dr. Harish Sharma")
+        room = booking.get("room_no", "कक्ष संख्या 4")
+        slot_t = booking.get("slot_time", "10:00 AM - 10:30 AM")
+        clinic = booking.get("clinic_name", "सामुदायिक स्वास्थ्य केंद्र, अलवर")
+        already_confirmed_msg = (
+            f"🎉 **आपकी ओपीडी परामर्श बुकिंग पहले ही सुनिश्चित हो चुकी है!**\n\n"
+            f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+            f"👨‍⚕️ **चिकित्सक:** {doc} ({room})\n"
+            f"🕒 **समय:** {slot_t}\n"
+            f"🏥 **अस्पताल:** {clinic}\n\n"
+            f"*(नए लक्षण या नए मरीज के लिए **'नया'** या **'start'** लिखकर भेजें)*"
+        )
+        await ctx.send(sender, create_text_chat(already_confirmed_msg))
+        return
+
     # 4. Check for explicit nearby CHC / Hospital location inquiry
     hospital_inquiry_phrases = [
         "नजदीकी अस्पताल",
@@ -700,7 +732,7 @@ async def _process_user_text(
 
         if (
             action == "numeric_choice"
-            and session["state"] == "STATE_SLOT_SELECTED"
+            and session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING")
             and session.get("available_slots")
         ):
             choice_num = action_data.get("choice", 1)
@@ -708,56 +740,18 @@ async def _process_user_text(
             if 1 <= choice_num <= len(slots):
                 chosen = slots[choice_num - 1]
                 session["selected_slot"] = chosen
-                session["state"] = "STATE_PAYMENT_PENDING"
-                dossier_id = session.get("dossier_id")
-                if not dossier_id:
-                    await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
-                    return
+                dossier_id = session.get("dossier_id") or f"D-AUTO-{uuid4().hex[:6].upper()}"
+                session["dossier_id"] = dossier_id
 
-                session["pending_request"] = {
-                    "type": "booking",
-                    "sent_at": now,
-                    "retries": 0,
-                    "correlation_id": correlation_id,
-                    "slot_id": chosen["slot_id"],
-                    "dossier_id": dossier_id,
-                }
-                session_store.save_session(sender, session)
-
-                if (
-                    not Config.DIRECT_DISPATCH_MODE
-                    and is_worker_online(Config.LOGISTICS_PORT)
-                    and WORKER_ADDRESSES.get("logistics")
-                ):
-                    session["pending_request"] = {
-                        "type": "booking",
-                        "sent_at": now,
-                        "retries": 0,
-                        "correlation_id": correlation_id,
-                        "slot_id": chosen["slot_id"],
-                        "dossier_id": dossier_id,
-                    }
-                    session_store.save_session(sender, session)
-                    await ctx.send(
-                        WORKER_ADDRESSES["logistics"],
-                        BookingCommitRequest(
-                            session_id=sender,
-                            patient_id=session["patient_id"],
-                            patient_name=session["patient_name"],
-                            slot_id=chosen["slot_id"],
-                            dossier_id=dossier_id,
-                            user_address=sender,
-                            correlation_id=correlation_id,
-                        ),
-                    )
-                else:
-                    await _execute_direct_booking(
-                        ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
-                    )
+                await _execute_direct_booking(
+                    ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
+                )
                 return
 
-    # 3. Handle fallback numeric slot choices (e.g. user typed '1', '2', or 'स्लॉट')
-    if session["state"] == "STATE_SLOT_SELECTED" and session.get("available_slots"):
+    # 3. Handle fallback slot choices & confirmation words (e.g. user typed '1', '2', 'slot 1', 'हाँ', 'book')
+    if session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING") and session.get(
+        "available_slots"
+    ):
         slots = session["available_slots"]
         choice_idx = None
 
@@ -768,46 +762,30 @@ async def _process_user_text(
                 choice_idx = c_num - 1
 
         if choice_idx is None:
-            for i, s in enumerate(slots):
-                if s.get("slot_id") == user_text or s.get("time", "").lower() in user_text.lower():
-                    choice_idx = i
-                    break
+            # If user said 'yes', 'book', 'confirm', 'हाँ', default to first slot
+            if any(
+                w in user_text.lower()
+                for w in ["yes", "book", "confirm", "हाँ", "हा", "कर दो", "पहला"]
+            ):
+                choice_idx = 0
+            else:
+                for i, s in enumerate(slots):
+                    if (
+                        s.get("slot_id") == user_text
+                        or s.get("time", "").lower() in user_text.lower()
+                    ):
+                        choice_idx = i
+                        break
 
-        if choice_idx is not None:
+        if choice_idx is not None and 0 <= choice_idx < len(slots):
             chosen = slots[choice_idx]
             session["selected_slot"] = chosen
-            session["state"] = "STATE_PAYMENT_PENDING"
-            dossier_id = session.get("dossier_id")
-            if not dossier_id:
-                await ctx.send(sender, create_text_chat("कृपया पहले अपने लक्षण बताएं।"))
-                return
+            dossier_id = session.get("dossier_id") or f"D-AUTO-{uuid4().hex[:6].upper()}"
+            session["dossier_id"] = dossier_id
 
-            if (
-                not Config.DIRECT_DISPATCH_MODE
-                and is_worker_online(Config.LOGISTICS_PORT)
-                and WORKER_ADDRESSES.get("logistics")
-            ):
-                session["pending_request"] = {
-                    "type": "booking",
-                    "sent_at": time.time(),
-                    "retries": 0,
-                }
-                session_store.save_session(sender, session)
-                await ctx.send(
-                    WORKER_ADDRESSES["logistics"],
-                    BookingCommitRequest(
-                        session_id=sender,
-                        patient_id=session["patient_id"],
-                        patient_name=session["patient_name"],
-                        slot_id=chosen["slot_id"],
-                        dossier_id=dossier_id,
-                        user_address=sender,
-                    ),
-                )
-            else:
-                await _execute_direct_booking(
-                    ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
-                )
+            await _execute_direct_booking(
+                ctx, sender, session, chosen["slot_id"], dossier_id, correlation_id
+            )
             return
 
     # 4. Handle text command to view slots if triage already presented
@@ -825,6 +803,60 @@ async def _process_user_text(
             )
         else:
             await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
+        return
+
+    # Guard: Prevent short affirmations, numbers, or navigation keywords from being treated as clinical symptoms
+    user_strip = user_text.strip()
+    is_non_clinical = (
+        user_strip.isdigit()
+        or user_strip.lower()
+        in [
+            "slot",
+            "slots",
+            "स्लॉट",
+            "book",
+            "बुकिंग",
+            "yes",
+            "haan",
+            "हाँ",
+            "हा",
+            "ok",
+            "done",
+            "confirm",
+            "1",
+            "2",
+            "3",
+            "first",
+            "second",
+            "third",
+            "पहला",
+            "दूसरा",
+            "तीसरा",
+        ]
+        or len(user_strip) <= 2
+    )
+    if is_non_clinical:
+        if session.get("available_slots"):
+            slots = session["available_slots"]
+            slots_text = "\n".join(f"• {i + 1}. समय: {s['time']}" for i, s in enumerate(slots))
+            prompt_msg = (
+                f"📅 **कृपया ओपीडी परामर्श के लिए स्लॉट नंबर चुनें:**\n\n"
+                f"{slots_text}\n\n"
+                f"👉 बुक करने के लिए **'1'**, **'2'**, या **'3'** लिखकर भेजें।"
+            )
+            await ctx.send(sender, create_text_chat(prompt_msg))
+            return
+        if session.get("state") == "STATE_TRIAGE_PRESENTED":
+            specialty = session.get("recommended_specialty", "General Medicine")
+            await _execute_direct_slots(ctx, sender, session, specialty, correlation_id)
+            return
+
+        await ctx.send(
+            sender,
+            create_text_chat(
+                "कृपया अपनी स्वास्थ्य समस्या या लक्षण विस्तार से बताएं (जैसे: 'मुझे 2 दिन से तेज बुखार और खांसी है')।"
+            ),
+        )
         return
 
     # 5. Symptom narrative input -> route to Diagnostic Worker if online, else direct
@@ -976,7 +1008,7 @@ async def handle_booking_commit_response(
         f"💳 Booking reserved for {msg.ticket_id}. Coordinating with EscrowWorkerAgent..."
     )
 
-    if not Config.DIRECT_DISPATCH_MODE and WORKER_ADDRESSES["escrow"]:
+    if not Config.DIRECT_DISPATCH_MODE and WORKER_ADDRESSES.get("escrow"):
         session["pending_request"] = {"type": "escrow", "sent_at": time.time(), "retries": 0}
         session_store.save_session(user_addr, session)
         await ctx.send(
@@ -989,6 +1021,20 @@ async def handle_booking_commit_response(
                 user_address=user_addr,
             ),
         )
+    else:
+        session["state"] = "STATE_CONFIRMED"
+        card = make_booking_receipt_card(
+            ticket_id=msg.ticket_id,
+            patient_name=session.get("patient_name", "अनाम मरीज"),
+            doctor_name=msg.doctor_name or "Dr. Harish Sharma",
+            clinic_name=msg.clinic_name or "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
+            room_no=msg.room_no or "कक्ष संख्या 4",
+            slot_time=msg.slot_time or "10:00 AM - 10:30 AM",
+            qr_payload=msg.qr_payload or f"CAREROUTE:{msg.ticket_id}",
+        )
+        intro_text = "🎉 **आपकी ओपीडी बुकिंग सफलतापूर्वक सुनिश्चित हो गई है!**"
+        await ctx.send(user_addr, create_card_chat(intro_text, card))
+        session_store.save_session(user_addr, session)
 
 
 @dispatcher.on_message(model=EscrowLockResponse)
@@ -1012,7 +1058,7 @@ async def handle_escrow_lock_response(ctx: Context, _sender: str, msg: EscrowLoc
 
     card = make_booking_receipt_card(
         ticket_id=ticket_id,
-        patient_name=session["patient_name"],
+        patient_name=session.get("patient_name", "अनाम मरीज"),
         doctor_name=doctor_name,
         clinic_name=clinic_name,
         room_no=room_no,
