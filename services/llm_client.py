@@ -83,12 +83,33 @@ JSON SCHEMA:
 """
 
 
+def extract_clean_json(text: str) -> dict:
+    """Extract and parse clean JSON dict from raw LLM output, stripping markdown fences and noise."""
+    text = text.strip()
+    # Strip markdown fences if present
+    if "```" in text:
+        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if match:
+            text = match.group(1)
+    # Fallback regex search for outermost curly braces
+    match = re.search(r"(\{.*\})", text, re.DOTALL)
+    if match:
+        text = match.group(1)
+    return json.loads(text)
+
+
 def clean_json_text(text: str) -> str:
     """Strip markdown fences and leading/trailing whitespace from LLM output."""
     raw = text.strip()
-    if raw.startswith("```"):
+    if "```" in raw:
+        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+        if match:
+            return match.group(1).strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
         raw = re.sub(r"\s*```$", "", raw)
+    match = re.search(r"(\{.*\})", raw, re.DOTALL)
+    if match:
+        return match.group(1).strip()
     return raw.strip()
 
 
@@ -348,9 +369,8 @@ class LLMClient:
         if not raw_text:
             return None, ""
 
-        cleaned = clean_json_text(raw_text)
         try:
-            data = json.loads(cleaned)
+            data = extract_clean_json(raw_text)
         except Exception as exc:
             logger.warning(f"JSON parsing error: {exc}. Raw: {raw_text[:120]}")
             return None, ""

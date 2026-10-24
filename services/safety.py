@@ -351,3 +351,132 @@ class SafetyService:
             "• मरीज को अकेला न छोड़ें। सांस लेने में कठिनाई होने पर सीधा बैठाएं।\n"
             "• बेहोशी या छाती में दर्द होने पर कोई ठोस भोजन या पेय न दें।"
         )
+
+    @classmethod
+    def check_acute_respiratory_risk(cls, text: str) -> dict[str, Any]:
+        """
+        Check for acute high-acuity respiratory markers:
+        If complaint includes cough (even < 2 weeks) AND explicit indicators of severe
+        breathlessness ("सांस फूलना", "दम घुटना", "breathlessness", "difficulty breathing")
+        OR high fever ("तेज़ बुखार", "high fever", ">102"), escalate urgency to Moderate-to-High
+        under General Medicine / Emergency evaluation.
+        Preserves clause-aware negation rules (e.g., 'सांस नहीं फूल रही' is not flagged).
+        """
+        if not text or not text.strip():
+            return {
+                "is_acute_respiratory_risk": False,
+                "has_cough": False,
+                "has_breathlessness": False,
+                "has_high_fever": False,
+                "has_blood_in_sputum": False,
+                "markers_detected": [],
+            }
+
+        norm = normalize_text(text)
+
+        # 1. Cough detection (with negation check)
+        cough_patterns = [
+            r"(?:खांसी|खंखा|कफ|बलगम)",
+            r"\b(?:cough|coughing|khansi|balgam|sputum)\b",
+        ]
+        has_cough = False
+        for pat in cough_patterns:
+            for match in re.finditer(pat, norm, re.IGNORECASE):
+                if not is_negated(norm, match.start(), match.end()):
+                    has_cough = True
+                    break
+            if has_cough:
+                break
+
+        # 2. Severe breathlessness indicators (with negation check)
+        breathlessness_patterns = [
+            r"स[ाा][ंँ]स\s*(?:फूल|घुट|तकलीफ|दिक्कत|ल[ेे]न[ेे]\s*म[ेै][ंँ]?\s*(?:दिक्कत|तकलीफ)|नह[ीीं]\s*आ)",
+            r"दम\s*घुट",
+            r"\b(?:breathlessness|difficulty\s*breathing|shortness\s*of\s*breath|dyspnea|gasping|cannot\s*breathe)\b",
+            r"\bsaans\s*(?:phool|ghut|lene\s*m\w*\s*(?:takleef|dikkat)|nahi\s*aa\s*rahi)\b",
+            r"\bdam\s*ghut\b",
+        ]
+        has_breathlessness = False
+        matched_breathlessness = None
+        for pat in breathlessness_patterns:
+            for match in re.finditer(pat, norm, re.IGNORECASE):
+                if not is_negated(norm, match.start(), match.end()):
+                    has_breathlessness = True
+                    matched_breathlessness = match.group(0)
+                    break
+            if has_breathlessness:
+                break
+
+        # 3. High fever indicators (with negation check)
+        high_fever_patterns = [
+            r"त[ेै]ज़\s*ब[ुु]ख[ाा]र",
+            r"त[ेै]ज\s*ब[ुु]ख[ाा]र",
+            r"अत्यधिक\s*ब[ुु]ख[ाा]र",
+            r"त[ेै]ज\s*ताप",
+            r"\b(?:high\s*(?:grade\s*)?fever|high\s*temp(?:erature)?|severe\s*fever|tez\s*bukhar)\b",
+            r"(?:> ?102|102|103|104)\s*(?:°?\s*[fc]|degree|डिग्री)?",
+        ]
+        has_high_fever = False
+        matched_high_fever = None
+        for pat in high_fever_patterns:
+            for match in re.finditer(pat, norm, re.IGNORECASE):
+                if not is_negated(norm, match.start(), match.end()):
+                    has_high_fever = True
+                    matched_high_fever = match.group(0)
+                    break
+            if has_high_fever:
+                break
+
+        # 4. Blood in sputum indicators (with negation check)
+        blood_sputum_patterns = [
+            r"बलगम\s*(?:म[ेै][ंँ]?\s*)?ख[ूु]न",
+            r"ख[ूु]न\s*क[ेे]\s*छींट[ेे]",
+            r"\b(?:blood\s*(?:in|streaked|stained)?\s*(?:sputum|phlegm)|hemoptysis|balgam\s*m\w*\s*khoon)\b",
+        ]
+        has_blood_in_sputum = False
+        matched_blood = None
+        for pat in blood_sputum_patterns:
+            for match in re.finditer(pat, norm, re.IGNORECASE):
+                if not is_negated(norm, match.start(), match.end()):
+                    has_blood_in_sputum = True
+                    matched_blood = match.group(0)
+                    break
+            if has_blood_in_sputum:
+                break
+
+        markers = []
+        if has_breathlessness:
+            markers.append(f"Severe Breathlessness / सांस फूलना ({matched_breathlessness})")
+        if has_high_fever:
+            markers.append(f"High Fever / तेज़ बुखार ({matched_high_fever})")
+        if has_blood_in_sputum:
+            markers.append(f"Blood in Sputum / बलगम में खून ({matched_blood})")
+
+        is_risk = has_cough and (has_breathlessness or has_high_fever or has_blood_in_sputum)
+
+        guidance_hi = (
+            "⚠️ **तीव्र श्वसन मूल्यांकन आवश्यक (Urgent Respiratory Evaluation):**\n"
+            "खांसी के साथ सांस फूलने या तेज़ बुखार के लक्षण संभावित गंभीर निमोनिया, ब्रोंकाइटिस या फेफड़ों के तीव्र संक्रमण का संकेत हो सकते हैं। "
+            "कृपया नियमित ओपीडी में देरी न करें और आज ही नजदीकी सामुदायिक स्वास्थ्य केंद्र (CHC) के डॉक्टर को दिखाएं। "
+            "मरीज को आरामदायक स्थिति में सीधा बैठाएं और पर्याप्त पानी पिलाएं। यदि सांस लेने में अत्यधिक कठिनाई हो तो तुरंत 108 पर संपर्क करें।"
+        )
+        guidance_en = (
+            "High-acuity respiratory markers detected (cough accompanied by breathlessness, high-grade fever, or blood-streaked sputum). "
+            "This presentation warrants urgent same-day in-person medical evaluation to assess for severe lower respiratory infection, "
+            "pneumonia, or bronchospasm. Sit upright in a comfortable position, maintain hydration, and consult the CHC Medical Officer today. "
+            "Call 108 immediately if respiratory distress intensifies."
+        )
+
+        return {
+            "is_acute_respiratory_risk": is_risk,
+            "has_cough": has_cough,
+            "has_breathlessness": has_breathlessness,
+            "has_high_fever": has_high_fever,
+            "has_blood_in_sputum": has_blood_in_sputum,
+            "markers_detected": markers,
+            "recommended_urgency": "High (Urgent Same-Day / तत्काल परामर्श)",
+            "recommended_specialty": "General Medicine",
+            "recommended_specialty_hindi": "सामान्य चिकित्सा एवं श्वसन रोग (General Medicine / Chest)",
+            "guidance_hi": guidance_hi,
+            "guidance_en": guidance_en,
+        }

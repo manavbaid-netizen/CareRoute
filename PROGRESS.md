@@ -163,3 +163,16 @@
   - `pytest -v` -> 74 passed in 14.00s.
 - **Open Items**: None. All 17 reviewer findings addressed and verified.
 - **Exact Next Step**: Project is fully ready for Fetch-a-thon 3.0 submission, Git commit, and deployment to GitHub.
+
+---
+
+## Stability Update Detail (Hackathon Demo Resilience)
+- **Status**: ✅ COMPLETED & VERIFIED
+- **Files Changed**:
+  - `services/llm_client.py`: Added `extract_clean_json()` with robust markdown fence and outermost brace extraction regex, integrated prior to schema parsing in `_parse_and_validate_json()`.
+  - `services/vlm_service.py`: Re-exported `extract_clean_json()`, integrated acute respiratory risk triage routing into `_mock_clinical_analysis()`.
+  - `services/geo_service.py`: Enforced strict `timeout=2.5` on Overpass network requests with `(requests.Timeout, requests.RequestException)` catch, logging brief warnings and fast fallback to local clinic records from `clinic_roster.json` and verified directory.
+  - `services/safety.py`: Added `check_acute_respiratory_risk()` detecting acute cough accompanied by severe breathlessness, high fever (>102°F), or blood in sputum with clause-aware negation rules (`is_negated`), escalating urgency to High under General Medicine.
+  - `tests/test_stability_updates.py`: 10 targeted tests verifying robust JSON parsing with fences/preambles, sub-second timeout fallback, acute respiratory risk escalation, and negation guardrails.
+- **Tests Passing**: 84/84 tests passing across the entire test suite (`pytest -v`).
+- **Demo Verification**: `python main.py --demo` verified running cleanly end-to-end.

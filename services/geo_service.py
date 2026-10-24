@@ -136,7 +136,7 @@ class GeoService:
         self,
         cache_dir: Path | None = None,
         cache_ttl_hours: int = 24,
-        request_timeout: float = 3.5,
+        request_timeout: float = 2.5,
     ) -> None:
         self.cache_dir = cache_dir or (Config.DATA_STORAGE_DIR / "cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -222,10 +222,47 @@ class GeoService:
                 if results:
                     results.sort(key=lambda x: x["distance_km"])
                     return results
-        except Exception as exc:
+        except (requests.Timeout, requests.RequestException) as exc:
             logger.warning(f"Overpass live query failed ({type(exc).__name__}): {exc}")
+        except Exception as exc:
+            logger.warning(f"Overpass live query unexpected error ({type(exc).__name__}): {exc}")
 
         return None
+
+    def get_fallback_clinic_records(
+        self,
+        latitude: float = 27.5530,
+        longitude: float = 76.6346,
+    ) -> list[dict[str, Any]]:
+        """
+        Return verified local clinic fallback records from seed clinic roster
+        and verified directory, sorted by distance.
+        """
+        seed_path = Path(__file__).resolve().parent.parent / "data" / "seed" / "clinic_roster.json"
+        if not seed_path.exists():
+            seed_path = Path(__file__).resolve().parent.parent / "data" / "clinic_roster.json"
+
+        seed_name = None
+        if seed_path.exists():
+            try:
+                with open(seed_path, encoding="utf-8") as f:
+                    seed_data = json.load(f)
+                    seed_name = seed_data.get("clinic_name")
+            except Exception as e:
+                logger.warning(f"Failed to read seed clinic roster: {e}")
+
+        fallback_results = []
+        for facility in VERIFIED_CHC_DIRECTORY:
+            fac_copy = dict(facility)
+            if seed_name and fac_copy.get("id") == "chc_alwar_main":
+                fac_copy["seed_clinic_name"] = seed_name
+            dist = haversine_distance_km(latitude, longitude, fac_copy["latitude"], fac_copy["longitude"])
+            fac_copy["distance_km"] = dist
+            fac_copy["source"] = "verified_offline_directory"
+            fallback_results.append(fac_copy)
+
+        fallback_results.sort(key=lambda x: x["distance_km"])
+        return fallback_results
 
     def find_nearest_chc(
         self,
@@ -239,7 +276,7 @@ class GeoService:
         Layered resolution:
           1. Check local query cache (returns if fresh).
           2. Query live OpenStreetMap Overpass API.
-          3. Fallback to verified Alwar district CHC directory with calculated distance.
+          3. Fallback to local clinic records from seed roster / verified directory.
         """
         cache_key = f"{round(latitude, 3)}_{round(longitude, 3)}_{int(radius_km)}"
         cache = self._load_cache()
@@ -261,16 +298,8 @@ class GeoService:
             self._save_cache(cache)
             return live_results[:max_results]
 
-        # 3. Offline Verified Fallback
-        fallback_results = []
-        for facility in VERIFIED_CHC_DIRECTORY:
-            fac_copy = dict(facility)
-            dist = haversine_distance_km(latitude, longitude, fac_copy["latitude"], fac_copy["longitude"])
-            fac_copy["distance_km"] = dist
-            fac_copy["source"] = "verified_offline_directory"
-            fallback_results.append(fac_copy)
-
-        fallback_results.sort(key=lambda x: x["distance_km"])
+        # 3. Offline Verified Fallback from seed clinic roster / verified directory
+        fallback_results = self.get_fallback_clinic_records(latitude, longitude)
         return fallback_results[:max_results]
 
     def format_chc_recommendation_hindi(self, facility: dict[str, Any]) -> str:

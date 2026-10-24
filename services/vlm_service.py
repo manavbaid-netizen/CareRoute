@@ -15,7 +15,7 @@ from models.clinical_schemas import (
     SubjectiveSOAP,
     TriageUrgency,
 )
-from services.llm_client import LLMClient
+from services.llm_client import LLMClient, extract_clean_json
 from services.safety import SafetyService
 
 logger = logging.getLogger("CareRoute.VLMService")
@@ -29,6 +29,8 @@ CLINICAL_DISCLAIMER_EN = (
     "CareRoute is an AI pre-intake assistant, not a doctor. "
     "It does not provide medical diagnoses or prescriptions. An in-person consultation is required."
 )
+
+__all__ = ["VLMService", "extract_clean_json", "CLINICAL_DISCLAIMER_HI", "CLINICAL_DISCLAIMER_EN"]
 
 
 class VLMService:
@@ -265,7 +267,14 @@ class VLMService:
         is_tb_suspect = has_cough and has_prolonged and len(b_symptoms) >= 1
 
         # ----------------------------------------------------------------------
-        # 2. Dermatological Presentation Screening
+        # 2. Acute High-Acuity Respiratory Safety Screening
+        # Acute cough (< 2w) with severe breathlessness, high fever, or blood in sputum
+        # ----------------------------------------------------------------------
+        acute_resp = SafetyService.check_acute_respiratory_risk(text_transcript)
+        is_acute_resp = acute_resp["is_acute_respiratory_risk"]
+
+        # ----------------------------------------------------------------------
+        # 3. Dermatological Presentation Screening
         # ----------------------------------------------------------------------
         is_derm = bool(re.search(
             r"(?:त्वचा|चर्म|दाद|खुजली|चकत्ते|फोड़े|फुंसी|दाने)|\b(?:skin|rash|rashes|itching|itchy|fungal|ringworm|eczema|psoriasis|boils|lesion)\b",
@@ -273,7 +282,7 @@ class VLMService:
         )) or (image_type == "lesion_photo")
 
         # ----------------------------------------------------------------------
-        # Case Routing: TB Suspect vs Dermatology vs General Medicine
+        # Case Routing: TB Suspect vs Acute Respiratory vs Dermatology vs General Medicine
         # ----------------------------------------------------------------------
         if is_tb_suspect:
             dossier = ClinicalDossier(
@@ -346,6 +355,70 @@ class VLMService:
                 "सीएचसी में **छाती रोग विशेषज्ञ (Chest Specialist)** से जांच कराना आवश्यक है। "
                 "हमने डॉक्टर के लिए क्लिनिकल सारांश (SOAP Dossier) और बलगम जांच की सिफारिश तैयार कर दी है।"
                 f"\n\n{CLINICAL_DISCLAIMER_HI}"
+            )
+
+        elif is_acute_resp:
+            # Acute high-acuity respiratory presentation (acute cough with breathlessness or high fever)
+            markers_str = ", ".join(acute_resp["markers_detected"])
+            dossier = ClinicalDossier(
+                dossier_id=dossier_id,
+                created_at=now_iso,
+                patient_id=patient_id,
+                patient_name=patient_name,
+                session_id=session_id,
+                engine="ASI1 | safe_fallback",
+                disclaimer=CLINICAL_DISCLAIMER_EN,
+                subjective=SubjectiveSOAP(
+                    patient_chief_complaint_hindi=text_transcript,
+                    chief_complaint_english="Acute cough with high-acuity respiratory markers.",
+                    history_of_present_illness=(
+                        f"Patient presents with acute cough and accompanying high-acuity indicators: {markers_str}. "
+                        "Warrants prompt in-person clinical assessment to rule out severe lower respiratory tract infection or pneumonia."
+                    ),
+                    symptom_duration="Acute (< 14 days)",
+                    associated_symptoms=acute_resp["markers_detected"],
+                    past_medical_history=[],
+                ),
+                objective=ObjectiveSOAP(
+                    vitals_reported={},
+                    visual_photo_findings=[],
+                    ocr_prescriptions=[],
+                    clinical_signs_summary="High-acuity respiratory signs noted. Immediate bedside vitals (SpO2, RR, Temp) needed at CHC.",
+                ),
+                assessment=AssessmentSOAP(
+                    triage_urgency=TriageUrgency.HIGH,
+                    differential_diagnoses=[
+                        "1. Community-Acquired Pneumonia (CAP) / Severe Acute LRTI",
+                        "2. Acute Infective Bronchitis with Bronchospasm",
+                        "3. Reactive Airway Disease exacerbation",
+                    ],
+                    recommended_specialty="General Medicine",
+                    recommended_specialty_hindi=acute_resp["recommended_specialty_hindi"],
+                    clinical_rationale=(
+                        f"Acute cough accompanied by severe high-acuity markers ({markers_str}) requires "
+                        "urgent same-day clinical examination and pulse oximetry triage at CHC OPD."
+                    ),
+                ),
+                plan=PlanSOAP(
+                    suggested_investigations=[
+                        "Stat Pulse Oximetry (SpO2) and Respiratory Rate measurement",
+                        "Chest Radiograph (X-Ray PA View)",
+                        "Complete Blood Count (CBC) with differential count",
+                    ],
+                    interim_patient_advice_hindi=acute_resp["guidance_hi"],
+                    interim_patient_advice_english=acute_resp["guidance_en"],
+                    red_flag_warnings=[
+                        "Sudden inability to speak full sentences",
+                        "Cyanosis / blue lips or fingertips",
+                        "Drowsiness, lethargy, or confusion",
+                    ],
+                ),
+                is_emergency=False,
+                emergency_tripwires_hit=[],
+            )
+
+            hindi_summary = (
+                f"{acute_resp['guidance_hi']}\n\n{CLINICAL_DISCLAIMER_HI}"
             )
 
         elif is_derm:
