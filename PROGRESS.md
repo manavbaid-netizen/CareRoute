@@ -185,4 +185,9 @@
     - Added `Mailbox401Filter` to suppress repetitive 401 polling logs and output a clean user guidance notice until activation completes.
   - `config.py`:
     - Dynamic `USE_AGENTVERSE` override for test runners to maintain clean offline unit test execution.
+  - `agents/dispatcher.py`:
+    - Added `_get_dispatcher_mailbox()` to support direct `AGENT_MAILBOX_KEY` injection (`mailbox=f"{Config.AGENT_MAILBOX_KEY}@https://agentverse.ai"`), bypassing local browser network restrictions completely.
+  - `scripts/check_registration.py`:
+    - Added display of `AGENT_MAILBOX_KEY` configuration status.
+
 
