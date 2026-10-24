@@ -63,6 +63,7 @@ class Config(metaclass=ConfigMeta):
 
     # Host & Port Configurations
     AGENT_HOST: str = os.getenv("AGENT_HOST", "127.0.0.1")
+    AGENT_ENDPOINT: str = os.getenv("AGENT_ENDPOINT", "")
     DISPATCHER_PORT: int = int(os.getenv("DISPATCHER_PORT", "8000"))
     DIAGNOSTIC_PORT: int = int(os.getenv("DIAGNOSTIC_PORT", "8001"))
     LOGISTICS_PORT: int = int(os.getenv("LOGISTICS_PORT", "8002"))

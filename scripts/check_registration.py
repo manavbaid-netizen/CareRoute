@@ -69,6 +69,7 @@ def main() -> None:
     console.print()
 
     console.print(f"• [bold]USE_AGENTVERSE:[/bold] {Config.USE_AGENTVERSE}")
+    console.print(f"• [bold]AGENT_ENDPOINT:[/bold] {Config.AGENT_ENDPOINT if Config.AGENT_ENDPOINT else 'Not set (using localhost:8000)'}")
     console.print(f"• [bold]AGENTVERSE_URL:[/bold] {Config.AGENTVERSE_URL}")
     has_key = bool(Config.AGENTVERSE_API_KEY and Config.AGENTVERSE_API_KEY != "CHANGE_ME")
     console.print(f"• [bold]AGENTVERSE_API_KEY:[/bold] {'Configured (***)' if has_key else 'Missing or CHANGE_ME'}")

@@ -101,7 +101,18 @@ RATE_LIMIT_WINDOW_SECS = 60.0
 MAX_REQUESTS_PER_WINDOW = 20
 _SENDER_MESSAGE_TIMESTAMPS: dict[str, list[float]] = {}
 
+def _get_dispatcher_endpoint() -> str | None:
+    if Config.AGENT_ENDPOINT:
+        return Config.AGENT_ENDPOINT
+    if not Config.USE_AGENTVERSE:
+        return Config.get_agent_endpoint(Config.DISPATCHER_PORT)
+    return None
+
+
 def _get_dispatcher_mailbox() -> bool | str:
+    # When a public endpoint is configured, mailbox polling is disabled
+    if Config.AGENT_ENDPOINT:
+        return False
     if not Config.USE_AGENTVERSE:
         return False
     mailbox_key = Config.AGENT_MAILBOX_KEY or Config.AGENTVERSE_API_KEY
@@ -115,9 +126,9 @@ dispatcher = Agent(
     name="dispatcher",
     seed=Config.DISPATCHER_SEED,
     port=Config.DISPATCHER_PORT,
-    endpoint=Config.get_agent_endpoint(Config.DISPATCHER_PORT) if not Config.USE_AGENTVERSE else None,
+    endpoint=_get_dispatcher_endpoint(),
     mailbox=_get_dispatcher_mailbox(),
-    publish_agent_details=Config.USE_AGENTVERSE,
+    publish_agent_details=Config.USE_AGENTVERSE or bool(Config.AGENT_ENDPOINT),
     readme_path="agentverse_readme.md",
 )
 
