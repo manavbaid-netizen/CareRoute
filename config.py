@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -87,7 +88,15 @@ class Config(metaclass=ConfigMeta):
     # Agentverse / ASI:One Gateway Configuration
     AGENTVERSE_API_KEY: str = os.getenv("AGENTVERSE_API_KEY", "")
     AGENT_MAILBOX_KEY: str = os.getenv("AGENT_MAILBOX_KEY", "")
-    USE_AGENTVERSE: bool = os.getenv("USE_AGENTVERSE", "false").lower() in ("true", "1", "yes")
+    USE_AGENTVERSE: bool = (
+        False
+        if (
+            "pytest" in sys.modules
+            or "PYTEST_CURRENT_TEST" in os.environ
+            or os.getenv("CAREROUTE_TEST_MODE") == "1"
+        )
+        else os.getenv("USE_AGENTVERSE", "false").lower() in ("true", "1", "yes")
+    )
     AGENTVERSE_URL: str = os.getenv("AGENTVERSE_URL", "https://agentverse.ai")
 
     # Primary ASI:One LLM API (OpenAI-compatible)

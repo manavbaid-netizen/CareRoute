@@ -7,9 +7,56 @@ from typing import Any
 from uuid import uuid4
 
 from uagents import Agent, Context, Protocol
+from uagents.asgi import ASGIServer
 from uagents.crypto import Identity
 
 from config import Config
+
+# CORS & Chromium Private Network Access handler for Agentverse Local Inspector
+_orig_asgi_send = ASGIServer._asgi_send
+
+
+async def _cors_asgi_send(self, send, status_code=200, headers=None, body=None):
+    merged = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS, HEAD",
+        "access-control-allow-headers": "*",
+        "access-control-allow-private-network": "true",
+    }
+    if headers:
+        merged.update(headers)
+    elif body is not None or status_code != 204:
+        merged["content-type"] = "application/json"
+    return await _orig_asgi_send(
+        self, send=send, status_code=status_code, headers=merged, body=body
+    )
+
+
+ASGIServer._asgi_send = _cors_asgi_send
+
+
+class Mailbox401Filter(logging.Filter):
+    """
+    Agentverse returns 401 until the mailbox is activated in Step 2.
+    Suppress the 1-second interval error flooding and show a clean guidance notice instead.
+    """
+
+    _warned = False
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "401" in msg and "Could not validate credentials" in msg:
+            if not Mailbox401Filter._warned:
+                Mailbox401Filter._warned = True
+                record.levelno = logging.INFO
+                record.levelname = "INFO"
+                record.msg = (
+                    "Agentverse Mailbox waiting for browser activation.\n"
+                    "👉 STEP 2: Open the Inspector URL in your browser and click 'Connect' (select 'Mailbox') to authorize this agent."
+                )
+                return True
+            return False  # Suppress repetitive 401 polling flood
+        return True
 from models.cards import (
     create_card_chat,
     make_booking_receipt_card,
@@ -64,6 +111,13 @@ dispatcher = Agent(
     publish_agent_details=Config.USE_AGENTVERSE,
     readme_path="agentverse_readme.md",
 )
+
+# Attach 401 suppressor to keep terminal clean until Step 2 is confirmed
+_mb_filter = Mailbox401Filter()
+dispatcher._logger.addFilter(_mb_filter)
+logging.getLogger("dispatcher").addFilter(_mb_filter)
+logging.getLogger("mailbox").addFilter(_mb_filter)
+
 
 
 def get_deterministic_address(seed: str) -> str:
