@@ -111,16 +111,11 @@ def _get_dispatcher_endpoint() -> str | None:
     return None
 
 
-def _get_dispatcher_mailbox() -> bool | str:
+def _get_dispatcher_mailbox() -> bool:
     # When a public endpoint is configured, mailbox polling is disabled
     if Config.AGENT_ENDPOINT:
         return False
-    if not Config.USE_AGENTVERSE:
-        return False
-    mailbox_key = Config.AGENT_MAILBOX_KEY or Config.AGENTVERSE_API_KEY
-    if mailbox_key:
-        return f"{mailbox_key}@https://agentverse.ai"
-    return True
+    return Config.USE_AGENTVERSE
 
 
 # Initialize Dispatcher (Master Gateway Agent)
