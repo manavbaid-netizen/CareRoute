@@ -506,6 +506,126 @@ async def _execute_direct_booking(
     session_store.save_session(sender, session)
 
 
+def classify_conversational_intent(user_text: str) -> str | None:
+    """
+    Intelligently identifies conversational messages that are not medical symptoms:
+    1. Greetings & courtesies ('good morning', 'namaste ji', 'how are you')
+    2. Bot identity & capabilities ('who are you', 'what can you do', 'help', 'kya kar sakte ho')
+    3. Gratitude & farewells ('thank you', 'shukriya', 'bye', 'dhanyawad')
+    4. Off-topic non-medical chit-chat ('weather', 'joke', 'cricket', 'politics', 'coding')
+
+    Returns an appropriate bilingual Markdown response string, or None if the query
+    contains medical indicators and should proceed to clinical triage.
+    """
+    clean_text = user_text.strip().lower()
+    clean_no_punct = re.sub(r"[^\w\s]", "", clean_text).strip()
+
+    # Guard: Clinical / Medical keywords that should NEVER be intercepted as off-topic
+    clinical_keywords = {
+        "fever", "bukhar", "khansi", "cough", "cold", "pain", "dard", "headache", "sar dard",
+        "chhati", "chest", "breath", "saans", "sans", "vomit", "ulti", "dast",
+        "diarrhea", "pet", "stomach", "loose motion", "bp", "blood", "khun", "sugar",
+        "diabetes", "chot", "injury", "ghav", "wound", "accident", "fracture",
+        "dawai", "medicine", "tablet", "goli", "syrup", "capsule", "doctor", "dr", "chikitsak",
+        "hospital", "aspataal", "chc", "phc", "opd", "report", "test", "scan", "x-ray", "xray",
+        "rash", "khujli", "itch", "skin", "chamdi", "infection", "chakkar", "dizziness",
+        "kamzori", "weakness", "sujan", "peshab", "urine", "throat", "gala", "tonsil",
+        "bimar", "bimari", "takleef", "problem", "symptom", "ill", "sick", "mariz", "patient",
+        "allergy", "typhoid", "malaria", "dengue", "jaundice", "piliya", "asthma", "tb",
+        "cancer", "heart", "cardio", "pulmo", "ortho", "gynae", "pediatric", "baccha",
+    }
+    has_clinical = any(k in clean_text for k in clinical_keywords)
+    if has_clinical:
+        return None
+
+    # 1. Gratitude & Farewells
+    gratitude_farewell_words = [
+        "thank you", "thanks", "dhanyawad", "dhanyavaad", "shukriya", "shukriya ji",
+        "bye", "goodbye", "alvida", "take care", "ok thanks", "thx", "शुक्रिया",
+        "धन्यवाद", "अलविदा", "थैंक यू", "बहुत शुक्रिया", "dhanyawad ji",
+    ]
+    if any(gw in clean_text for gw in gratitude_farewell_words):
+        return (
+            "🙏 **आपका बहुत-बहुत धन्यवाद!**\n\n"
+            "केयररूट का उपयोग करने के लिए आभार। हम आपके और आपके परिवार के उत्तम स्वास्थ्य की मंगलकामना करते हैं।\n\n"
+            "यदि भविष्य में आपको किसी भी स्वास्थ्य समस्या, ओपीडी पर्ची या डॉक्टर की आवश्यकता हो, "
+            "तो आप कभी भी संदेश भेज सकते हैं।\n\n"
+            "स्वस्थ रहें, सुरक्षित रहें! 🌸\n\n"
+            "*(नया परामर्श शुरू करने के लिए कभी भी **'start'** या **'नमस्ते'** लिखें)*"
+        )
+
+    # 2. Identity, Capabilities & Help
+    help_identity_phrases = [
+        "who are you", "what are you", "what can you do", "help", "help me", "madad",
+        "services", "kya kar sakte ho", "aap kaun ho", "tum kaun ho", "kya kaam", "menu",
+        "features", "madad karo", "sahayata", "तुम कौन हो", "आप कौन हो", "क्या कर सकते हो",
+        "मदद", "सहायता", "सुविधा", "क्या सुविधा है", "काम क्या है", "फैसिलिटी",
+    ]
+    if any(hp in clean_text for hp in help_identity_phrases):
+        return (
+            "🤖 **केयररूट (CareRoute) परिचय एवं सुविधाएं:**\n\n"
+            "मैं ग्रामीण एवं कस्बाई क्षेत्रों के सरकारी सामुदायिक स्वास्थ्य केंद्रों (CHC) के लिए "
+            "एक AI-संचालित डिजिटल स्वास्थ्य नेविगेटर हूँ। 🙏\n\n"
+            "✨ **प्रमुख विशेषताएं एवं सुविधाएं:**\n"
+            "1. 🩺 **लक्षणों का क्लिनिकल आकलन**: अपनी बीमारी के लक्षण बताएं, AI प्राथमिक क्लिनिकल ग्रेडिंग और सही ओपीडी विभाग सुझाता है।\n"
+            "2. 📄 **पुरानी पर्ची या घाव की फोटो**: पुरानी डॉक्टर की पर्ची या त्वचा की फोटो भेजें, VLM विज़न मॉडल उसे पढ़कर डॉक्टर के लिए सारांश बनाता है।\n"
+            "3. 🏥 **ओपीडी स्लॉट एवं डिजिटल टोकन**: अस्पताल में लंबी लाइनों से बचने के लिए डॉक्टर का समय पहले से आरक्षित करना।\n"
+            "4. 🔐 **सुरक्षित 0.5 FET एस्क्रो**: नो-शो रोकने के लिए माइक्रो-एस्क्रो, जो अस्पताल पहुंचते ही क्यूआर स्कैन पर 100% रिफंड होता है।\n"
+            "5. 🚨 **108 आपातकालीन अलर्ट**: गंभीर खतरों की तुरंत पहचान कर 108 एम्बुलेंस निर्देश।\n\n"
+            "👉 *परामर्श शुरू करने के लिए अपने लक्षण लिखें (जैसे: 'मुझे 2 दिन से बुखार और उल्टी है') या **'start'** भेजें।*"
+        )
+
+    # 3. Greetings & Courtesies
+    greeting_words = [
+        "hi", "hello", "hey", "namaste", "namaskar", "pranam", "ram ram", "radhe radhe",
+        "jai shree ram", "salam", "sat sri akal", "kya haal hai", "kaise ho", "kese ho",
+        "kem cho", "vanakkam", "good morning", "good evening", "good afternoon", "gm", "ge",
+        "how are you", "aap kaise ho", "sab theek", "नमस्ते", "नमस्कार", "प्रणाम", "राधे राधे",
+        "राम राम", "जय श्री राम", "सलाम", "सत श्री अकाल", "हाय", "हेलो", "कैसे हो", "क्या हाल है",
+        "start", "shuru", "शुरू",
+    ]
+    is_greeting = clean_no_punct in greeting_words or any(
+        clean_text == gw or clean_text.startswith(gw + " ") or clean_text.endswith(" " + gw)
+        for gw in greeting_words
+    )
+    if is_greeting:
+        return (
+            "🙏 **नमस्ते! मैं केयररूट (CareRoute) हूँ - आपका डिजिटल स्वास्थ्य सहायक।**\n\n"
+            "मैं सामुदायिक स्वास्थ्य केंद्र (CHC) में ओपीडी परामर्श और डॉक्टर से मिलने की प्रक्रिया को आसान बनाता हूँ।\n\n"
+            "💡 **आप कैसे शुरुआत कर सकते हैं?**\n"
+            "• अपनी समस्या या लक्षण (हिंदी / English) में लिखकर भेजें।\n"
+            "• पुरानी डॉक्टर की पर्ची की फोटो भेजें।\n"
+            "• या नजदीकी अस्पताल के लिए 'नजदीकी अस्पताल' लिखें।\n\n"
+            "*(उदाहरण: 'मुझे 3 दिन से तेज़ बुखार और खांसी आ रही है')*"
+        )
+
+    # 4. Off-Topic / Non-Medical Queries
+    off_topic_patterns = [
+        r"\b(?:weather|mausam|rain|barish|temperature|taapman)\b",
+        r"\b(?:cricket|match|ipl|score|football|sports|khel)\b",
+        r"\b(?:joke|chutkula|chutkule|haso|hasao|funny)\b",
+        r"\b(?:song|gana|geet|movie|film|cinema|actor|actress)\b",
+        r"\b(?:shayari|kavita|poem|story|kahani)\b",
+        r"\b(?:code|python|java|javascript|programming|coding|algorithm)\b",
+        r"\b(?:crypto|bitcoin|btc|eth|share\s*market|nifty|sensex|stock)\b",
+        r"\b(?:prime\s*minister|president|modi|rahul|election|chunav|politics|rajniti)\b",
+        r"\b(?:capital\s*of|who\s*is|who\s*won|calculate|math|maths|solve)\b",
+        r"\b(?:recipe|khana\s*kaise|dish|cooking|cook)\b",
+    ]
+    if any(re.search(pat, clean_text) for pat in off_topic_patterns):
+        return (
+            "🙏 **क्षमा करें, मैं केवल स्वास्थ्य एवं ओपीडी परामर्श (CareRoute Health Assistant) के लिए उपलब्ध हूँ।**\n\n"
+            "मैं सामान्य ज्ञान, मौसम, खेल, मनोरंजन या गैर-चिकित्सीय विषयों पर सहायता करने में असमर्थ हूँ।\n\n"
+            "💡 **मैं आपकी इन स्वास्थ्य विषयों में सहायता कर सकता हूँ:**\n"
+            "• अपनी बीमारी या शारीरिक समस्या के लक्षण बताना (जैसे बुखार, सिरदर्द, खांसी)।\n"
+            "• पुरानी मेडिकल पर्ची की फोटो का विश्लेषण करवाना।\n"
+            "• नजदीकी सरकारी अस्पताल (CHC) में डॉक्टर की ओपीडी पर्ची और समय बुक करना।\n\n"
+            "👉 *यदि आपको या आपके परिवार में किसी को कोई शारीरिक समस्या या लक्षण हैं, तो कृपया बताएं।*"
+        )
+
+    return None
+
+
 async def _process_user_text(
     ctx: Context, sender: str, session: dict[str, Any], user_text: str
 ) -> None:
@@ -543,35 +663,21 @@ async def _process_user_text(
         f"💬 [CID: {correlation_id}] User text from {sender}: '{user_text[:60]}...' [State: {session['state']}]"
     )
 
-    # 3. Check for greeting (e.g. "hi", "hello", "नमस्ते", "hey", "start")
-    greetings = {
-        "hi",
-        "hello",
-        "hey",
-        "नमस्ते",
-        "नमस्कार",
-        "pranam",
-        "प्रणाम",
-        "start",
-        "shuru",
-        "शुरू",
-        "हाय",
-        "हेलो",
-    }
-    cleaned_input = re.sub(r"[^\w\s]", "", user_text.lower()).strip()
-    if cleaned_input in greetings or any(user_text.lower().strip() == g for g in greetings):
-        welcome_text = (
-            "नमस्ते! मैं **केयररूट (CareRoute)** - आपका डिजिटल स्वास्थ्य सहायक हूँ। 🙏\n\n"
-            "कृपया अपनी समस्या या लक्षण बताएं। आप बोलकर या लिखकर (हिंदी / English) बता सकते हैं, "
-            "या पुरानी पर्ची की फोटो भेज सकते हैं।\n\n"
-            "*(उदाहरण: 'मुझे 3 दिन से तेज़ बुखार और खांसी आ रही है')*"
-        )
-        await ctx.send(sender, create_text_chat(welcome_text))
-        ctx.logger.info(f"👋 [CID: {correlation_id}] Dispatched welcome greeting to {sender}")
-        return
-
     # Parse JSON button action or numeric choice
     action_data: dict[str, Any] | None = parse_card_action(user_text)
+
+    # Check for conversational intents (Greetings, Capabilities, Gratitude, Off-Topic)
+    # Only if this is not a numeric selection during slot picking
+    is_picking_slot = session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING")
+    is_numeric_pick = action_data and action_data.get("action") == "numeric_choice"
+
+    if not (is_picking_slot and is_numeric_pick):
+        conversational_response = classify_conversational_intent(user_text)
+        if conversational_response:
+            # If session is confirmed and user gave a greeting or thanks, answer and preserve session
+            await ctx.send(sender, create_text_chat(conversational_response))
+            ctx.logger.info(f"🗣️ [CID: {correlation_id}] Conversational intent handled for {sender}")
+            return
 
     # Check if user already has a confirmed booking in this session
     if session.get("state") == "STATE_CONFIRMED" and session.get("ticket_id"):
