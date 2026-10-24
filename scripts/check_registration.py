@@ -72,6 +72,8 @@ def main() -> None:
     console.print(f"• [bold]AGENTVERSE_URL:[/bold] {Config.AGENTVERSE_URL}")
     has_key = bool(Config.AGENTVERSE_API_KEY and Config.AGENTVERSE_API_KEY != "CHANGE_ME")
     console.print(f"• [bold]AGENTVERSE_API_KEY:[/bold] {'Configured (***)' if has_key else 'Missing or CHANGE_ME'}")
+    has_mb_key = bool(Config.AGENT_MAILBOX_KEY and Config.AGENT_MAILBOX_KEY != "CHANGE_ME")
+    console.print(f"• [bold]AGENT_MAILBOX_KEY:[/bold] {'Configured (***)' if has_mb_key else 'Not set'}")
 
     console.print("\n[bold]Checking Dispatcher Registration Status on Agentverse Almanac...[/bold]")
     almanac_data = check_agentverse_almanac(disp_addr, Config.AGENTVERSE_URL)

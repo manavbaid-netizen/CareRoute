@@ -101,13 +101,21 @@ RATE_LIMIT_WINDOW_SECS = 60.0
 MAX_REQUESTS_PER_WINDOW = 20
 _SENDER_MESSAGE_TIMESTAMPS: dict[str, list[float]] = {}
 
+def _get_dispatcher_mailbox() -> bool | str:
+    if not Config.USE_AGENTVERSE:
+        return False
+    if Config.AGENT_MAILBOX_KEY:
+        return f"{Config.AGENT_MAILBOX_KEY}@https://agentverse.ai"
+    return True
+
+
 # Initialize Dispatcher (Master Gateway Agent)
 dispatcher = Agent(
     name="dispatcher",
     seed=Config.DISPATCHER_SEED,
     port=Config.DISPATCHER_PORT,
-    endpoint=None if Config.USE_AGENTVERSE else Config.get_agent_endpoint(Config.DISPATCHER_PORT),
-    mailbox=Config.USE_AGENTVERSE,
+    endpoint=Config.get_agent_endpoint(Config.DISPATCHER_PORT) if not Config.USE_AGENTVERSE else None,
+    mailbox=_get_dispatcher_mailbox(),
     publish_agent_details=Config.USE_AGENTVERSE,
     readme_path="agentverse_readme.md",
 )
