@@ -9,6 +9,7 @@ import json
 import time
 from unittest.mock import patch
 
+import pytest
 import requests
 
 from models.clinical_schemas import ClinicalDossier, TriageUrgency
@@ -231,3 +232,85 @@ def test_vlm_routine_cough_without_distress_remains_low_urgency():
     assert dossier.assessment.triage_urgency == TriageUrgency.LOW
     assert dossier.assessment.recommended_specialty == "General Medicine"
     assert "Tuberculosis" not in dossier.assessment.differential_diagnoses[0]
+
+
+# ==============================================================================
+# 4. DIRECT BOOKING & SESSION STORE REGRESSION TESTS
+# ==============================================================================
+
+
+def test_make_booking_receipt_card_kwargs_tolerance():
+    """Verify make_booking_receipt_card tolerates qr_payload and unknown kwargs safely."""
+    from models.cards import make_booking_receipt_card
+
+    card = make_booking_receipt_card(
+        ticket_id="CR-TEST-999",
+        patient_name="रवि कुमार",
+        doctor_name="Dr. Harish Sharma",
+        clinic_name="Alwar CHC",
+        room_no="Room 4",
+        slot_time="10:00 AM - 10:30 AM",
+        qr_payload="CAREROUTE:CR-TEST-999",
+        qr_token="simulated_token",
+        extra_param="safe_ignore",
+    )
+    assert card["card_type"] == "booking_receipt"
+    assert "CR-TEST-999" in card["header"]["badge"]
+
+
+def test_session_store_persists_available_slots_and_specialty(tmp_path):
+    """Verify session_store retains available_slots and recommended_specialty across reloads."""
+    from services.session_store import SessionStore
+
+    db_file = tmp_path / "test_session.db"
+    store = SessionStore(db_path=str(db_file))
+    user = "agent1q_test_persist_user"
+
+    session = store.get_or_create_session(user)
+    session["state"] = "STATE_SLOT_SELECTED"
+    session["recommended_specialty"] = "Pulmonology"
+    session["available_slots"] = [{"slot_id": "slot_test", "time": "10:00 AM"}]
+    store.save_session(user, session)
+
+    # Invalidate in-memory cache to force sqlite read
+    store._cache.clear()
+    reloaded = store.get_or_create_session(user)
+    assert reloaded["state"] == "STATE_SLOT_SELECTED"
+    assert reloaded["recommended_specialty"] == "Pulmonology"
+    assert len(reloaded["available_slots"]) == 1
+    assert reloaded["available_slots"][0]["slot_id"] == "slot_test"
+
+
+@pytest.mark.anyio
+async def test_direct_booking_end_to_end():
+    """Verify _execute_direct_booking successfully transitions to STATE_CONFIRMED without TypeError."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from agents.dispatcher import _execute_direct_booking, roster_service
+
+    roster_service.reset_slot("ALW_GEN_0930")
+    user = "agent1q_test_direct_book_user"
+    session = {
+        "user_address": user,
+        "state": "STATE_SLOT_SELECTED",
+        "patient_id": "P-101",
+        "patient_name": "मोहन लाल",
+    }
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    await _execute_direct_booking(
+        ctx=mock_ctx,
+        sender=user,
+        session=session,
+        slot_id="ALW_GEN_0930",
+        dossier_id="DOS-TEST",
+        correlation_id="test_cid",
+    )
+
+    assert session["state"] == "STATE_CONFIRMED"
+    assert session.get("ticket_id") is not None
+    assert mock_ctx.send.call_count == 1
+

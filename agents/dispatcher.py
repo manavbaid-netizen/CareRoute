@@ -430,13 +430,17 @@ async def _execute_direct_booking(
     ctx.logger.info(
         f"📝 [CID: {correlation_id}] Booking appointment directly for {sender} (slot {slot_id})"
     )
-    booking = roster_service.book_appointment(
-        slot_id=slot_id,
-        patient_id=session.get("patient_id", "P-101"),
-        patient_name=session.get("patient_name", "अनाम मरीज"),
-        dossier_id=dossier_id,
-        user_address=sender,
-    )
+    try:
+        booking = roster_service.book_appointment(
+            slot_id=slot_id,
+            patient_id=session.get("patient_id", "P-101"),
+            patient_name=session.get("patient_name", "अनाम मरीज"),
+            dossier_id=dossier_id,
+        )
+    except ValueError as val_err:
+        ctx.logger.warning(f"Booking rejected for slot {slot_id}: {val_err}")
+        booking = None
+
     if not booking:
         session["state"] = "STATE_SLOT_SELECTED"
         session_store.save_session(sender, session)
@@ -451,6 +455,15 @@ async def _execute_direct_booking(
     session["ticket_id"] = ticket_id
     session["state"] = "STATE_CONFIRMED"
 
+    # Link dossier to ticket if available
+    dossier = session.get("dossier")
+    if dossier:
+        try:
+            saved = dossier_service.save_dossier(dossier, ticket_id=ticket_id)
+            roster_service.update_dossier_path(ticket_id, saved.get("md_path", ""))
+        except Exception as d_exc:
+            ctx.logger.warning(f"Could not update dossier path for ticket {ticket_id}: {d_exc}")
+
     doctor_name = booking.get("doctor_name", "Dr. Harish Sharma")
     clinic_name = booking.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
     room_no = booking.get("room_no", "कक्ष संख्या 4")
@@ -464,8 +477,7 @@ async def _execute_direct_booking(
         clinic_name=clinic_name,
         room_no=room_no,
         slot_time=slot_time,
-        qr_token=booking.get("qr_token", ""),
-        qr_payload=qr_payload,
+        qr_data=qr_payload,
     )
     intro_text = (
         f"🎉 **आपकी ओपीडी परामर्श बुकिंग सफलतापूर्वक पुष्टि हो गई है!**\n\n"
@@ -733,10 +745,13 @@ async def _process_user_text(
         if (
             action == "numeric_choice"
             and session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING")
-            and session.get("available_slots")
         ):
+            if not session.get("available_slots"):
+                spec = session.get("recommended_specialty", "General Medicine")
+                slots_res = roster_service.get_available_slots(spec)
+                session["available_slots"] = slots_res.get("slots", [])
             choice_num = action_data.get("choice", 1)
-            slots = session["available_slots"]
+            slots = session.get("available_slots") or []
             if 1 <= choice_num <= len(slots):
                 chosen = slots[choice_num - 1]
                 session["selected_slot"] = chosen
@@ -749,10 +764,12 @@ async def _process_user_text(
                 return
 
     # 3. Handle fallback slot choices & confirmation words (e.g. user typed '1', '2', 'slot 1', 'हाँ', 'book')
-    if session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING") and session.get(
-        "available_slots"
-    ):
-        slots = session["available_slots"]
+    if session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING"):
+        if not session.get("available_slots"):
+            spec = session.get("recommended_specialty", "General Medicine")
+            slots_res = roster_service.get_available_slots(spec)
+            session["available_slots"] = slots_res.get("slots", [])
+        slots = session.get("available_slots") or []
         choice_idx = None
 
         fallback_action = parse_card_action(user_text)
@@ -1030,7 +1047,7 @@ async def handle_booking_commit_response(
             clinic_name=msg.clinic_name or "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)",
             room_no=msg.room_no or "कक्ष संख्या 4",
             slot_time=msg.slot_time or "10:00 AM - 10:30 AM",
-            qr_payload=msg.qr_payload or f"CAREROUTE:{msg.ticket_id}",
+            qr_data=msg.qr_payload or f"CAREROUTE:{msg.ticket_id}",
         )
         intro_text = "🎉 **आपकी ओपीडी बुकिंग सफलतापूर्वक सुनिश्चित हो गई है!**"
         await ctx.send(user_addr, create_card_chat(intro_text, card))
@@ -1240,7 +1257,6 @@ async def request_timeout_watchdog(ctx: Context) -> None:
                             patient_id=session.get("patient_id", "P-101"),
                             patient_name=session.get("patient_name", "अनाम मरीज"),
                             dossier_id=dossier_id,
-                            user_address=user_addr,
                         )
                         if booking:
                             session["booking_details"] = booking

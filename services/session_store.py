@@ -55,6 +55,7 @@ class SessionStore:
             row = cursor.fetchone()
 
             if row:
+                metadata = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
                 session = {
                     "user_address": row["user_address"],
                     "session_id": row["user_address"],
@@ -71,7 +72,9 @@ class SessionStore:
                     "pending_request": json.loads(row["pending_request_json"])
                     if row["pending_request_json"]
                     else None,
-                    "metadata": json.loads(row["metadata_json"]) if row["metadata_json"] else {},
+                    "metadata": metadata,
+                    "available_slots": metadata.get("available_slots"),
+                    "recommended_specialty": metadata.get("recommended_specialty"),
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
                     "dossier": None,
@@ -106,6 +109,14 @@ class SessionStore:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         session["updated_at"] = now
 
+        # Persist available_slots and recommended_specialty inside metadata
+        metadata = dict(session.get("metadata") or {})
+        if "available_slots" in session and session["available_slots"] is not None:
+            metadata["available_slots"] = session["available_slots"]
+        if "recommended_specialty" in session and session["recommended_specialty"] is not None:
+            metadata["recommended_specialty"] = session["recommended_specialty"]
+        session["metadata"] = metadata
+
         selected_slot_json = (
             json.dumps(session.get("selected_slot")) if session.get("selected_slot") else None
         )
@@ -115,7 +126,7 @@ class SessionStore:
         pending_request_json = (
             json.dumps(session.get("pending_request")) if session.get("pending_request") else None
         )
-        metadata_json = json.dumps(session.get("metadata", {}))
+        metadata_json = json.dumps(metadata)
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

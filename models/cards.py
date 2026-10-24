@@ -424,11 +424,14 @@ def make_booking_receipt_card(
     slot_time: str,
     deposit_fet: float = 0.5,
     qr_data: str = "",
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """
     Build an ASI Interactive Card confirming the patient's OPD appointment,
     providing the clinic check-in QR payload and anti-no-show escrow receipt.
     """
+    if not qr_data and "qr_payload" in kwargs:
+        qr_data = str(kwargs["qr_payload"])
     payload_str = qr_data or f"CAREROUTE-CHECKIN:{ticket_id}:{clinic_name}:{room_no}"
 
     qr_ascii_preview = (
