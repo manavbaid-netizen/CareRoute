@@ -193,5 +193,19 @@
   - `ruff check .`: 0 errors (all checks passed).
   - `ruff format --check .`: 100% formatted across all 42 files.
 
+## Live ASI:One IPC Routing & Greeting Support
+- **Issue Diagnosed**:
+  - `Worker IPC request failed`: In multi-process mode, `dispatcher` was attempting to resolve local worker addresses (`diagnostic`, `logistics`, `escrow`) using the global Almanac contract rather than local loopback endpoints.
+  - "hi" not responding: Incoming greetings ("hi", "hello", "नमस्ते") were being treated as clinical symptom narratives and forwarded to `DiagnosticWorker`, which timed out when IPC failed.
+  - ASI:One `EndStreamContent`: Warnings were logged for benign streaming termination tokens.
+- **Patches Applied**:
+  - `services/swarm_resolver.py`: Created `SwarmResolver` to map deterministic local agent addresses to `http://127.0.0.1:{PORT}/submit`, falling back to `GlobalResolver` for external ASI:One users.
+  - Attached `SwarmResolver` across all 4 agents (`dispatcher`, `diagnostic_worker`, `logistics_worker`, `escrow_worker`).
+  - `agents/dispatcher.py`:
+    - Added instant greeting handler recognizing "hi", "hello", "नमस्ते", "hey", "start", returning the introductory welcome message in 0.1s.
+    - Refined CHC hospital inquiry detection to prevent generic conversational sentences containing "अस्पताल" from triggering repeated hospital lists.
+    - Silenced `EndStreamContent` warnings.
+
+
 
 
