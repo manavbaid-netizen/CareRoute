@@ -520,13 +520,13 @@ async def handle_health_check(_ctx: Context) -> HealthResponse:
 
 def format_clinical_dossier_view(session: dict[str, Any], ticket_id: str) -> str:
     """
-    Format and render the comprehensive Doctor's 3-Minute OPD Clinical Dossier (SOAP note)
-    for clinical review on doctor terminal or patient mobile preview.
+    Format a concise, high-yield Doctor's OPD Clinical Dossier (SOAP intake summary)
+    providing both doctor and patient all essential clinical & logistical data without clutter.
     """
     booking = session.get("booking_details") or {}
-    doc = booking.get("doctor_name", "Dr. Rajesh Meena (एमबीबीएस, वरिष्ठ चिकित्सा अधिकारी)")
+    doc = booking.get("doctor_name", "Dr. Rajesh Meena (वरिष्ठ चिकित्सा अधिकारी)")
     clinic = booking.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
-    room = booking.get("room_no", "कक्ष संख्या 2 (Room 2)")
+    room = booking.get("room_no", "कक्ष संख्या 2")
     slot_t = booking.get("slot_time", "11:00 AM - 11:30 AM")
     spec = session.get("recommended_specialty", "General Medicine")
     patient_name = session.get("patient_name", "मरीज (Patient)")
@@ -546,7 +546,6 @@ def format_clinical_dossier_view(session: dict[str, Any], ticket_id: str) -> str
         except Exception:
             dossier = None
 
-    # Extract or infer clinical fields
     if dossier:
         s = getattr(dossier, "subjective", None)
         o = getattr(dossier, "objective", None)
@@ -554,124 +553,72 @@ def format_clinical_dossier_view(session: dict[str, Any], ticket_id: str) -> str
         p = getattr(dossier, "plan", None)
 
         chief_hi = getattr(s, "patient_chief_complaint_hindi", "3 दिन से तेज बुखार, खांसी और बदन दर्द")
-        chief_en = getattr(s, "chief_complaint_english", "Acute Febrile Illness with Productive Cough")
-        duration = getattr(s, "symptom_duration", "3 दिन (3 Days)")
-        hpi = getattr(
-            s,
-            "history_of_present_illness",
-            "Patient reports moderate-to-high fever with chills for 3 days, accompanied by persistent dry-to-productive cough and generalized fatigue. Denies chest tightness, hemoptysis, or shortness of breath. No prior chronic illnesses reported.",
-        )
-        assoc = ", ".join(getattr(s, "associated_symptoms", [])) or "सिरदर्द (Headache), बदन दर्द (Body ache), हल्की ठंड लगना (Mild chills)"
+        chief_en = getattr(s, "chief_complaint_english", "Acute Febrile Respiratory Illness")
+        duration = getattr(s, "symptom_duration", "3 दिन")
 
-        # Vitals
         vitals_dict = getattr(o, "vitals_reported", {})
         if vitals_dict:
             vitals_str = " | ".join(f"{k}: {v}" for k, v in vitals_dict.items())
         else:
-            vitals_str = "Temp: 101.2°F (Reported) | Pulse: 86 bpm | SpO2: 98% on room air | BP: Pending desk check"
+            vitals_str = "Temp: 101.2°F | SpO2: 98% | Pulse: 86 bpm"
 
-        # Assessment
-        urgency = getattr(getattr(a, "triage_urgency", None), "value", "MODERATE (Yellow - Priority 2)")
-        rationale = getattr(
-            a,
-            "clinical_rationale",
-            "Acute presentation of febrile respiratory syndrome. Bilateral lung auscultation needed to rule out consolidation and endemic tropical infections (Malaria/Dengue).",
-        )
-        differentials = getattr(a, "differential_diagnoses", [])
-        if not differentials:
-            differentials = [
-                "1. Acute Viral Upper/Lower Respiratory Tract Infection [65%]",
-                "2. Community-Acquired Acute Bronchitis [25%]",
-                "3. Endemic Febrile Illness (Malarial / Dengue screening recommended) [10%]",
-            ]
-        diff_str = "\n".join(f"  • {d}" for d in differentials)
+        urg_val = str(getattr(getattr(a, "triage_urgency", None), "value", "MODERATE"))
+        if any(w in urg_val.lower() for w in ["high", "urgent", "तत्काल"]):
+            urgency_badge = "🔴 उच्च (HIGH - Priority 1)"
+        elif "emergency" in urg_val.lower():
+            urgency_badge = "🚨 आपातकालीन (EMERGENCY)"
+        elif "low" in urg_val.lower():
+            urgency_badge = "🟢 सामान्य (LOW - Priority 3)"
+        else:
+            urgency_badge = "🟡 मध्यम (MODERATE - Priority 2)"
 
-        # Plan
+        diffs = getattr(a, "differential_diagnoses", [])
+        if diffs:
+            cleaned_diffs = [d.split(". ")[-1] if ". " in d else d for d in diffs[:2]]
+            diff_str = " / ".join(cleaned_diffs)
+        else:
+            diff_str = "Acute Viral RTI (65%) / Acute Bronchitis (25%)"
+
         invs = getattr(p, "suggested_investigations", [])
-        if not invs:
-            invs = [
-                "सीबीसी जांच (Complete Blood Count - CBC with Platelets)",
-                "मलेरिया एंटीजन त्वरित जांच (Malarial Antigen Rapid Dual Test)",
-                "छाती का एक्स-रे (Chest X-Ray PA View - if crepitations detected)",
-                "विडाल जांच (Widal Test - if fever persists beyond 5 days)",
-            ]
-        inv_str = "\n".join(f"  [ ] {inv}" for inv in invs)
+        if invs:
+            inv_str = ", ".join(invs[:2])
+        else:
+            inv_str = "सीबीसी (CBC with Platelets), मलेरिया आरडीटी (Malaria RDT)"
 
         advice_hi = getattr(
             p,
             "interim_patient_advice_hindi",
-            "पर्याप्त ओआरएस (ORS) व गुनगुना पानी पिएं। बुखार 100°F से अधिक होने पर पैरासिटामोल 500mg SOS लें। भाप लें और आराम करें।",
+            "पर्याप्त ओआरएस व गुनगुना पानी पिएं, बुखार पर पैरासिटामोल लें व आराम करें।",
         )
-        red_flags = getattr(p, "red_flag_warnings", [])
-        if not red_flags:
-            red_flags = [
-                "सांस लेने में अत्यधिक कठिनाई या छाती में तेज जकड़न।",
-                "होंठ या नाखूनों का नीला पड़ना (Cyanosis)।",
-                "अत्यधिक कमजोरी, बेहोशी या भ्रम की स्थिति (Altered sensorium)।",
-            ]
-        rf_str = "\n".join(f"  ⚠️ {rf}" for rf in red_flags)
     else:
-        # High quality clinical fallback
-        chief_hi = "3 दिन से तेज बुखार, खांसी और कमजोरी"
-        chief_en = "Acute Febrile Illness with Cough & Myalgia"
-        duration = "3 दिन (3 Days)"
-        hpi = "Patient reports acute onset of high-grade fever with chills for 3 days, accompanied by persistent cough and generalized weakness. Denies dyspnea, chest pain, or hemoptysis. No chronic comorbidities reported."
-        assoc = "सिरदर्द (Headache), कमजोरी (Fatigue), हल्की कंपकंपी (Chills)"
-        vitals_str = "Temp: 101.4°F (Reported) | Pulse: 88 bpm | SpO2: 97% on room air | BP: Pending triage desk"
-        urgency = "MODERATE (Yellow - Priority 2)"
-        rationale = "Acute febrile respiratory presentation. Needs chest auscultation to evaluate lower airway involvement and rapid screening for seasonal vector-borne diseases."
-        diff_str = (
-            "  • 1. Acute Viral Respiratory Tract Infection (Flu-like Syndrome) [60%]\n"
-            "  • 2. Community-Acquired Acute Bronchitis [25%]\n"
-            "  • 3. Seasonal Vector-Borne Febrile Illness (Malarial/Dengue screen) [15%]"
-        )
-        inv_str = (
-            "  [ ] सीबीसी जांच (Complete Blood Count - CBC with Platelets)\n"
-            "  [ ] मलेरिया एंटीजन त्वरित जांच (Malarial Antigen Rapid Dual Test)\n"
-            "  [ ] छाती का एक्स-रे (Chest X-Ray PA View - if crepitations heard)\n"
-            "  [ ] विडाल जांच (Widal Test - if fever persists > 5 days)"
-        )
-        advice_hi = "पर्याप्त ओआरएस (ORS) व गुनगुना पानी पिएं। बुखार 100°F से अधिक होने पर पैरासिटामोल 500mg SOS लें। भाप लें और विश्राम करें।"
-        rf_str = (
-            "  ⚠️ सांस फूलना या छाती में तेज दर्द होने पर तत्काल 108 पर कॉल करें।\n"
-            "  ⚠️ तेज कंपकंपी या बेहोशी जैसी स्थिति होने पर तुरंत इमरजेंसी वार्ड जाएं।"
-        )
+        chief_hi = "3 दिन से तेज बुखार, खांसी और बदन दर्द"
+        chief_en = "Acute Febrile Respiratory Illness"
+        duration = "3 दिन"
+        vitals_str = "Temp: 101.4°F | SpO2: 98% | Pulse: 86 bpm"
+        urgency_badge = "🟡 मध्यम (MODERATE - Priority 2)"
+        diff_str = "Acute Viral RTI (65%) / Acute Bronchitis (25%)"
+        inv_str = "सीबीसी (CBC with Platelets), मलेरिया आरडीटी (Malaria RDT)"
+        advice_hi = "पर्याप्त ओआरएस व गुनगुना पानी पिएं, बुखार पर पैरासिटामोल लें व आराम करें।"
 
     return (
-        f"📋 **ओपीडी क्लिनिकल डोजियर (Doctor's 3-Minute Intake Dossier)**\n"
+        f"📋 **ओपीडी क्लिनिकल डोजियर (Doctor's OPD Intake Dossier)**\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎫 **टोकन क्रमांक:** `{ticket_id}` | 🆔 **डोजियर:** `{dossier_id}`\n"
-        f"👤 **मरीज (Patient):** {patient_name} ({patient_id})\n"
+        f"🎫 **टोकन:** `{ticket_id}` | 🆔 `{dossier_id}`\n"
+        f"👤 **मरीज:** {patient_name} ({patient_id})\n"
         f"👨‍⚕️ **परामर्शदाता:** {doc} ({room})\n"
         f"🏥 **अस्पताल:** {clinic}\n"
         f"🕒 **समय:** {slot_t} | 🩺 **विभाग:** {spec}\n"
-        f"🟡 **क्लिनिकल प्राथमिकता:** `{urgency}`\n"
+        f"🚦 **ट्रायज प्राथमिकता:** {urgency_badge}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"### 1. SUBJECTIVE (S) - लक्षण व रोगी इतिहास\n"
-        f"• **मरीज की मुख्य शिकायत (Vernacular):**\n"
-        f"  > *\"{chief_hi}\"*\n"
-        f"• **क्लिनिकल अनुवाद (Medical Translation):** **{chief_en}**\n"
-        f"• **लक्षण अवधि (Duration):** {duration}\n"
-        f"• **इतिहास (HPI):** {hpi}\n"
-        f"• **संबद्ध लक्षण (Associated Symptoms):** {assoc}\n\n"
-        f"### 2. OBJECTIVE (O) - वाइटल्स व परीक्षण अवलोकन\n"
-        f"• **प्रारंभिक वाइटल्स (Reported Vitals):**\n"
-        f"  `{vitals_str}`\n"
-        f"• **विजुअल परीक्षण / पर्ची (OCR & Visual):** कोई पिछली दवा एलर्जी या घाव नहीं मिला।\n\n"
-        f"### 3. ASSESSMENT (A) - डॉक्टर का क्लिनिकल आकलन\n"
-        f"• **क्लिनिकल तर्क (Clinical Impression):**\n"
-        f"  {rationale}\n"
-        f"• **संभावित विभेदक निदान (Differential Diagnoses):**\n"
-        f"{diff_str}\n\n"
-        f"### 4. PLAN (P) - अनुशंसित लैब जांच व अंतरिम सलाह\n"
-        f"🧪 **सीएचसी लैब जांच ऑर्डर (One-Click Orders for Doctor):**\n"
-        f"{inv_str}\n\n"
-        f"💊 **मरीज को अंतरिम सलाह (Pre-Visit Advice):**\n"
-        f"  > *\"{advice_hi}\"*\n\n"
-        f"⚠️ **रेड-फ्लैग चेतावनियां (Emergency Red Flags):**\n"
-        f"{rf_str}\n"
+        f"🩺 **क्लिनिकल सारांश (Doctor's Quick Intake):**\n"
+        f"• **लक्षण:** \"{chief_hi}\" ➔ **{chief_en}** ({duration})\n"
+        f"• **प्रारंभिक वाइटल्स:** `{vitals_str}`\n"
+        f"• **संभावित निदान (Differentials):** {diff_str}\n"
+        f"• **अनुशंसित जांचें (Lab Orders):** {inv_str}\n\n"
+        f"💊 **मरीज निर्देश (Patient Care & Next Steps):**\n"
+        f"• **अंतरिम सलाह:** {advice_hi}\n"
+        f"• ⚠️ **इमरजेंसी अलर्ट:** सांस फूलने या सीने में तेज दर्द पर तुरंत इमरजेंसी वार्ड जाएं।\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"*(यह क्लिनिकल डोजियर डॉक्टर के ओपीडी कंप्यूटर पर डिजिटल रूप से उपलब्ध करा दिया गया है)*\n\n"
         f"👉 अस्पताल पहुंचने पर चेक-इन एवं 0.5 FET रिफंड के लिए **'1'** लिखकर भेजें।"
     )
 
