@@ -742,11 +742,74 @@ def classify_conversational_intent(user_text: str) -> str | None:
     return None
 
 
+def is_garbage_or_unclear(text: str) -> bool:
+    """
+    Detect if user input is gibberish, keyboard mashing, pure punctuation/numbers,
+    or vague non-medical noise that should not be triaged as a medical symptom.
+    """
+    t = text.strip().lower()
+
+    # 1. Punctuation only, digits only, or whitespace
+    if not re.search(r"[a-zA-Z\u0900-\u097f]", t) or t.isdigit():
+        return True
+
+    # 2. Repeated single characters (e.g. 'aaaaa', '......', '1111')
+    if len(set(t)) <= 2 and len(t) > 2:
+        return True
+
+    # 3. Common non-clinical single words / fillers
+    vague_fillers = {
+        "ok", "okay", "k", "hmm", "hm", "hmmm", "yes", "no", "haan", "ha", "nahi",
+        "theek", "thik", "accha", "acha", "sahi", "test", "testing", "check", "checking",
+        "abc", "xyz", "hello", "hi", "hey", "a", "b", "c", "blah", "nothing", "kuch nahi",
+        "random", "asdf", "qwerty", "pass", "skip", "yo", "bye"
+    }
+    if t in vague_fillers:
+        return True
+
+    # 4. Keyboard mash detection (long consonant runs or keyboard walks)
+    kb_rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
+    words = t.split()
+    for w in words:
+        if len(w) >= 4:
+            for i in range(len(w) - 3):
+                if any(w[i : i + 4] in row for row in kb_rows):
+                    return True
+        if len(w) >= 6 and re.search(r"^[a-zA-Z]+$", w):
+            vowels = re.findall(r"[aeiouy]", w)
+            if len(vowels) == 0 or (len(w) >= 7 and len(vowels) / len(w) < 0.20):
+                return True
+
+    # 5. Single short word that is not a known medical symptom keyword
+    known_symptoms = {
+        "बुखार", "खांसी", "जुकाम", "दर्द", "उल्टी", "दस्त", "चक्कर", "कमजोरी", "खुजली",
+        "दाने", "सूजन", "जलन", "कब्ज", "थकान", "घबराहट", "दौरा", "fever", "cough", "cold",
+        "pain", "vomit", "vomiting", "diarrhea", "dizziness", "weakness", "itching", "rash",
+        "swelling", "burn", "burning", "fatigue", "headache", "chest", "throat", "asthma",
+        "chhati", "pet", "sar", "gala", "bukhar", "khansi", "dard", "ulti", "chakkar"
+    }
+    if len(words) == 1 and len(t) < 4 and t not in known_symptoms:
+        return True
+
+    return False
+
+
 async def _process_user_text(
     ctx: Context, sender: str, session: dict[str, Any], user_text: str
 ) -> None:
     """Process incoming text narrative, button action JSON, or fallback selection with security controls."""
     now = time.time()
+
+    # Strip leading @mentions from ASI:One chat (e.g., '@careroute', '@careroute_bot', '@agent1q...')
+    user_text = re.sub(r"^(@[\w.:,-]+\s*)+", "", user_text).strip()
+    if not user_text:
+        welcome_msg = (
+            "🙏 **नमस्ते! मैं केयररूट (CareRoute) हूँ - आपका डिजिटल स्वास्थ्य सहायक।**\n\n"
+            "कृपया अपनी स्वास्थ्य समस्या या बीमारी के लक्षण बताएं (जैसे: 'मुझे 3 दिन से तेज़ बुखार और खांसी है') "
+            "या पुरानी डॉक्टर की पर्ची की फोटो भेजें।"
+        )
+        await ctx.send(sender, create_text_chat(welcome_msg))
+        return
 
     # 1. Enforce Input Length Limits (Prevent buffer bloat / prompt injection)
     if len(user_text) > MAX_INPUT_LENGTH:
@@ -1312,7 +1375,23 @@ async def _process_user_text(
         )
         return
 
-    # 5. Symptom narrative input -> route to Diagnostic Worker if online, else direct
+    # 5. Garbage & Unclear Input Protection
+    # Prevent gibberish, keyboard mashing, or vague fillers from polluting clinical triage
+    if is_garbage_or_unclear(user_text):
+        garbage_help_msg = (
+            "🙏 **नमस्ते! हम आपकी बात पूरी तरह समझ नहीं पाए।**\n\n"
+            "कृपया अपनी शारीरिक समस्या या बीमारी के लक्षण विस्तार से बताएं:\n\n"
+            "💡 **उदाहरण:**\n"
+            "• *\"मुझे 3 दिन से तेज़ बुखार और खांसी है\"*\n"
+            "• *\"कल रात से पेट में तेज़ दर्द और उल्टी हो रही है\"*\n"
+            "• *\"2 हफ्ते से लगातार बदन दर्द और कमजोरी है\"*\n"
+            "• या पुरानी डॉक्टर की पर्ची / घाव की फोटो भेजें।\n\n"
+            "👉 *नया सत्र शुरू करने के लिए **'start'** या **'नया'** लिखें।*"
+        )
+        await ctx.send(sender, create_text_chat(garbage_help_msg))
+        return
+
+    # 6. Symptom narrative input -> route to Diagnostic Worker if online, else direct
     if (
         not Config.DIRECT_DISPATCH_MODE
         and is_worker_online(Config.DIAGNOSTIC_PORT)
