@@ -699,7 +699,6 @@ def classify_conversational_intent(user_text: str) -> str | None:
         "kem cho", "vanakkam", "good morning", "good evening", "good afternoon", "gm", "ge",
         "how are you", "aap kaise ho", "sab theek", "नमस्ते", "नमस्कार", "प्रणाम", "राधे राधे",
         "राम राम", "जय श्री राम", "सलाम", "सत श्री अकाल", "हाय", "हेलो", "कैसे हो", "क्या हाल है",
-        "start", "shuru", "शुरू",
     ]
     is_greeting = clean_no_punct in greeting_words or any(
         clean_text == gw or clean_text.startswith(gw + " ") or clean_text.endswith(" " + gw)
@@ -782,8 +781,84 @@ async def _process_user_text(
 
     # Parse JSON button action or numeric choice
     action_data: dict[str, Any] | None = parse_card_action(user_text)
+    user_lower = user_text.lower().strip()
+    act_name = action_data.get("action") if action_data else None
 
-    # Check for conversational intents (Greetings, Capabilities, Gratitude, Off-Topic)
+    # 1. PRIORITY CHECK: Explicit Session Reset / New Consultation Keywords
+    # Must precede conversational intent matching so 'start' / 'नया' always clears previous state
+    is_restart_cmd = (
+        act_name in ("restart", "new_session", "start", "new")
+        or user_lower in ("start", "/start", "restart", "new", "reset", "begin", "नया", "शुरू", "नया सत्र", "new consultation")
+        or any(user_lower == kw or user_lower.startswith(kw + " ") for kw in ["start", "/start", "restart", "नया", "शुरू"])
+    )
+    if is_restart_cmd:
+        session["state"] = "STATE_IDLE"
+        session["dossier"] = None
+        session["dossier_id"] = None
+        session["ticket_id"] = None
+        session["available_slots"] = None
+        session["selected_slot"] = None
+        session["booking_details"] = None
+        session["pending_request"] = None
+        session["checkin_completed"] = False
+        session_store.save_session(sender, session)
+        welcome_msg = (
+            "🙏 **नमस्ते! मैं केयररूट (CareRoute) हूँ - आपका डिजिटल स्वास्थ्य सहायक।**\n\n"
+            "🔄 **नया परामर्श सत्र प्रारंभ हो गया है।**\n\n"
+            "💡 **आप कैसे शुरुआत कर सकते हैं?**\n"
+            "• अपनी समस्या या लक्षण (हिंदी / English) में लिखकर भेजें।\n"
+            "• पुरानी डॉक्टर की पर्ची की फोटो भेजें।\n"
+            "• या नजदीकी अस्पताल के लिए 'नजदीकी अस्पताल' लिखें।\n\n"
+            "*(उदाहरण: 'मुझे 3 दिन से तेज़ बुखार और खांसी आ रही है')*"
+        )
+        await ctx.send(sender, create_text_chat(welcome_msg))
+        return
+
+    # 2. PRIORITY CHECK: Previously Checked-In / Completed Visit
+    # If the user has already attended/checked in for their previous slot, that visit is fulfilled.
+    if session.get("state") == "STATE_CHECKED_IN" or session.get("checkin_completed"):
+        is_dossier = (
+            act_name == "view_dossier"
+            or (act_name == "numeric_choice" and action_data.get("choice") == 2)
+            or user_lower in ("2", "दो", "#2", "[2]", "dossier", "डोजियर", "summary", "सारांश")
+            or any(kw in user_lower for kw in ["dossier", "डोजियर", "summary", "सारांश", "पर्ची", "रिपोर्ट"])
+        )
+        if is_dossier:
+            ticket_id = session.get("ticket_id") or "CR-CHECKEDIN"
+            dossier_text = format_clinical_dossier_view(session, ticket_id)
+            await ctx.send(sender, create_text_chat(dossier_text))
+            return
+
+        is_checkin_repeat = (
+            act_name == "clinic_checkin"
+            or (act_name == "numeric_choice" and action_data.get("choice") == 1)
+            or user_lower in ("1", "एक", "#1", "[1]", "checkin", "check-in", "check in", "चेक-इन", "चेक इन", "रिफंड", "refund")
+        )
+        if is_checkin_repeat:
+            already_refunded_msg = (
+                "✅ **आपका अस्पताल चेक-इन और 0.5 FET रिफंड पहले ही पूरा हो चुका है!**\n\n"
+                "कृपया परामर्श कक्ष के बाहर अपनी बारी की प्रतीक्षा करें।\n"
+                "👉 किसी अन्य समस्या या नए परामर्श के लिए अपने नए लक्षण लिखकर भेजें या **'नया'** लिखें।"
+            )
+            await ctx.send(sender, create_text_chat(already_refunded_msg))
+            return
+
+        # Otherwise, user is sending new symptoms or starting another inquiry.
+        # Clear completed booking so they smoothly enter fresh triage without hitting old booking reminders:
+        session["state"] = "STATE_IDLE"
+        session["dossier"] = None
+        session["dossier_id"] = None
+        session["ticket_id"] = None
+        session["available_slots"] = None
+        session["selected_slot"] = None
+        session["booking_details"] = None
+        session["pending_request"] = None
+        session["checkin_completed"] = False
+        session_store.save_session(sender, session)
+        ctx.logger.info(f"🔄 Completed booking cleared for {sender}. Transitioned to fresh consultation.")
+        # Proceed with execution into conversational intent check and symptom triage
+
+    # 3. Check for conversational intents (Greetings, Capabilities, Gratitude, Off-Topic)
     # Only if this is not a numeric selection during slot picking
     is_picking_slot = session.get("state") in ("STATE_SLOT_SELECTED", "STATE_PAYMENT_PENDING")
     is_numeric_pick = action_data and action_data.get("action") == "numeric_choice"
@@ -796,28 +871,11 @@ async def _process_user_text(
             ctx.logger.info(f"🗣️ [CID: {correlation_id}] Conversational intent handled for {sender}")
             return
 
-    # Check if user already has a confirmed booking in this session
+    # 4. Check if user already has an ACTIVE (un-checked-in) confirmed booking
     if session.get("state") == "STATE_CONFIRMED" and session.get("ticket_id"):
         ticket_id = session.get("ticket_id")
-        user_lower = user_text.lower().strip()
 
-        # A. Restart session keyword
-        if any(kw in user_lower for kw in ["new", "restart", "start", "नया", "शुरू", "begin"]):
-            session["state"] = "STATE_IDLE"
-            session["dossier"] = None
-            session["dossier_id"] = None
-            session["ticket_id"] = None
-            session["available_slots"] = None
-            session["selected_slot"] = None
-            session["booking_details"] = None
-            session["pending_request"] = None
-            session_store.save_session(sender, session)
-            reset_msg = "🔄 नया सत्र प्रारंभ हो गया है। कृपया अपने नए लक्षण या स्वास्थ्य समस्या बताएं।"
-            await ctx.send(sender, create_text_chat(reset_msg))
-            return
-
-        # B. Hospital Check-in Action (Button 1 or text '1', 'check-in', 'refund', 'रिफंड')
-        act_name = action_data.get("action") if action_data else None
+        # A. Hospital Check-in Action (Button 1 or text '1', 'check-in', 'refund', 'रिफंड')
         is_checkin = (
             act_name == "clinic_checkin"
             or (act_name == "numeric_choice" and action_data.get("choice") == 1)
@@ -850,13 +908,17 @@ async def _process_user_text(
                 f"• ट्रांजैक्शन हैश: `{refund_tx}`\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"✅ मरीज का चेक-इन पूरा हो चुका है। कृपया कक्ष के बाहर अपनी बारी की प्रतीक्षा करें।\n\n"
-                f"*(नए परामर्श के लिए **'start'** या **'नया'** लिखकर भेजें)*"
+                f"*(नए परामर्श के लिए **'start'** या **'नया'** लिखकर भेजें, या सीधे नए लक्षण लिखें)*"
             )
+            # Mark visit as checked-in so subsequent messages know the appointment was fulfilled
+            session["state"] = "STATE_CHECKED_IN"
+            session["checkin_completed"] = True
+            session_store.save_session(sender, session)
             await ctx.send(sender, create_text_chat(checkin_text))
             ctx.logger.info(f"✅ Clinic check-in executed and escrow refunded for ticket {ticket_id}")
             return
 
-        # C. View Dossier Action (Button 2 or text '2', 'dossier', 'डोजियर', 'summary')
+        # B. View Dossier Action (Button 2 or text '2', 'dossier', 'डोजियर', 'summary')
         is_dossier = (
             act_name == "view_dossier"
             or (act_name == "numeric_choice" and action_data.get("choice") == 2)
@@ -868,23 +930,42 @@ async def _process_user_text(
             await ctx.send(sender, create_text_chat(dossier_text))
             return
 
-        # D. Otherwise, remind user of their existing confirmed ticket
+        # C. Otherwise, check if user sent new symptoms or inquiry
         booking = session.get("booking_details") or {}
         doc = booking.get("doctor_name", "Dr. Rajesh Meena")
         room = booking.get("room_no", "कक्ष संख्या 2")
-        slot_t = booking.get("slot_time", "09:30 AM - 10:00 AM")
-        clinic = booking.get("clinic_name", "सामुदायिक स्वास्थ्य केंद्र, अलवर")
-        already_confirmed_msg = (
-            f"🎉 **आपकी ओपीडी परामर्श बुकिंग पहले ही सुनिश्चित हो चुकी है!**\n\n"
-            f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
-            f"👨‍⚕️ **चिकित्सक:** {doc} ({room})\n"
-            f"🕒 **समय:** {slot_t}\n"
-            f"🏥 **अस्पताल:** {clinic}\n\n"
-            f"👉 विकल्प चुनें:\n"
-            f"• अस्पताल चेक-इन और रिफंड के लिए: **'1'** या **'check-in'**\n"
-            f"• क्लिनिकल डोजियर देखने के लिए: **'2'** या **'dossier'**\n"
-            f"• नए लक्षण या नए मरीज के लिए: **'नया'** या **'start'**"
+        slot_t = booking.get("slot_time", "11:00 AM - 11:30 AM")
+        clinic = booking.get("clinic_name", "अलवर सामुदायिक स्वास्थ्य केंद्र (Alwar CHC)")
+
+        is_symptom_like = len(user_text.split()) >= 3 or any(
+            med_kw in user_lower
+            for med_kw in [
+                "बुखार", "खांसी", "दर्द", "उल्टी", "चक्कर", "दवा", "fever", "cough", "pain",
+                "vomit", "cold", "headache", "chest", "breath", "throat", "rash", "khansi",
+                "bukhar", "dard", "ulti", "chhati", "saans"
+            ]
         )
+        if is_symptom_like:
+            already_confirmed_msg = (
+                f"ℹ️ **आपकी एक ओपीडी बुकिंग पहले से सक्रिय है:**\n\n"
+                f"🎫 **टोकन:** `{ticket_id}` | 👨‍⚕️ {doc} ({room})\n"
+                f"🕒 **समय:** {slot_t} | 🏥 {clinic}\n\n"
+                f"❓ **क्या आप इन नए लक्षणों के लिए नई बुकिंग करना चाहते हैं?**\n"
+                f"👉 नया परामर्श शुरू करने के लिए **'नया'** या **'start'** लिखकर भेजें।\n"
+                f"👉 मौजूदा बुकिंग के डोजियर के लिए **'2'** भेजें, या अस्पताल पहुंचकर चेक-इन के लिए **'1'** भेजें।"
+            )
+        else:
+            already_confirmed_msg = (
+                f"🎉 **आपकी ओपीडी परामर्श बुकिंग पहले ही सुनिश्चित हो चुकी है!**\n\n"
+                f"🎫 **टोकन क्रमांक:** `{ticket_id}`\n"
+                f"👨‍⚕️ **चिकित्सक:** {doc} ({room})\n"
+                f"🕒 **समय:** {slot_t}\n"
+                f"🏥 **अस्पताल:** {clinic}\n\n"
+                f"👉 विकल्प चुनें:\n"
+                f"• अस्पताल चेक-इन और रिफंड के लिए: **'1'** या **'check-in'**\n"
+                f"• क्लिनिकल डोजियर देखने के लिए: **'2'** या **'dossier'**\n"
+                f"• नए लक्षण या नए मरीज के लिए: **'नया'** या **'start'**"
+            )
         await ctx.send(sender, create_text_chat(already_confirmed_msg))
         return
 
@@ -1030,6 +1111,9 @@ async def _process_user_text(
                     f"• ट्रांजैक्शन हैश: `{rel_resp.refund_tx_hash}`\n\n"
                     f"केयररूट का उपयोग करने के लिए धन्यवाद। आपका परामर्श शुभ हो!"
                 )
+                session["state"] = "STATE_CHECKED_IN"
+                session["checkin_completed"] = True
+                session_store.save_session(sender, session)
                 await ctx.send(sender, create_text_chat(checkin_text))
             return
 

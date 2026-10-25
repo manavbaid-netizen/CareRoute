@@ -441,3 +441,82 @@ async def test_confirmed_booking_view_dossier_flow():
     assert "क्लिनिकल डोजियर" in sent_text
     assert ticket in sent_text
 
+
+@pytest.mark.anyio
+async def test_post_checkin_new_consultation_flow():
+    """Verify that after checking in, a patient can immediately present new symptoms without loop."""
+    from unittest.mock import AsyncMock, MagicMock
+    from agents.dispatcher import _process_user_text, session_store
+
+    ticket = "CR-ALW-POSTCHECKIN01"
+    patient = "agent1q_test_patient_postcheckin"
+
+    session = {
+        "user_address": patient,
+        "state": "STATE_CONFIRMED",
+        "ticket_id": ticket,
+        "patient_id": "P-404",
+        "patient_name": "रामकुमार",
+        "booking_details": {
+            "ticket_id": ticket,
+            "doctor_name": "Dr. Rajesh Meena",
+            "clinic_name": "अलवर CHC",
+            "room_no": "कक्ष 2",
+            "slot_time": "11:00 AM",
+            "qr_payload": f"CAREROUTE:{ticket}",
+        },
+    }
+    session_store.save_session(patient, session)
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    # Step 1: User checks in with "1"
+    await _process_user_text(mock_ctx, patient, session, "1")
+    assert session["state"] == "STATE_CHECKED_IN"
+    assert session["checkin_completed"] is True
+    checkin_msg = mock_ctx.send.call_args[0][1].content[0].text
+    assert "चेक-इन सत्यापन एवं रिफंड सफल" in checkin_msg
+
+    # Step 2: User now presents new symptoms for next visit
+    mock_ctx.send.reset_mock()
+    await _process_user_text(mock_ctx, patient, session, "start")
+    assert session["state"] == "STATE_IDLE"
+    assert session["ticket_id"] is None
+    welcome_msg = mock_ctx.send.call_args[0][1].content[0].text
+    assert "नया परामर्श सत्र प्रारंभ" in welcome_msg
+
+
+@pytest.mark.anyio
+async def test_explicit_start_resets_confirmed_booking():
+    """Verify typing 'start' or 'नया' resets an un-checked-in confirmed booking cleanly."""
+    from unittest.mock import AsyncMock, MagicMock
+    from agents.dispatcher import _process_user_text, session_store
+
+    ticket = "CR-ALW-STARTRESET"
+    patient = "agent1q_test_patient_startreset"
+
+    session = {
+        "user_address": patient,
+        "state": "STATE_CONFIRMED",
+        "ticket_id": ticket,
+        "patient_id": "P-505",
+        "patient_name": "सीता देवी",
+        "booking_details": {"ticket_id": ticket},
+    }
+    session_store.save_session(patient, session)
+
+    mock_ctx = MagicMock()
+    mock_ctx.send = AsyncMock()
+    mock_ctx.logger = MagicMock()
+
+    await _process_user_text(mock_ctx, patient, session, "start")
+    assert session["state"] == "STATE_IDLE"
+    assert session["ticket_id"] is None
+    reset_text = mock_ctx.send.call_args[0][1].content[0].text
+    assert "नया परामर्श सत्र प्रारंभ" in reset_text
+
+
+
+
